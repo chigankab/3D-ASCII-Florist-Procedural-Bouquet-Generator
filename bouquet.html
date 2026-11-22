@@ -1,0 +1,3446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3D ASCII Florist — Bouquet Generator</title>
+<style>
+  :root {
+    --bg-panel: rgba(11, 14, 24, 0.84);
+    --border-panel: rgba(244, 196, 198, 0.16);
+    --border-strong: rgba(244, 196, 198, 0.38);
+    --text-main: #f3dcde;
+    --text-dim: rgba(236, 208, 212, 0.62);
+    --accent: #ef8354;
+    --accent-soft: rgba(239, 131, 84, 0.20);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #06080e;
+    background: radial-gradient(circle at 50% 46%, #141a2c 0%, #0a0d17 55%, #05060b 100%);
+    font-family: 'JetBrains Mono', 'Cascadia Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+    color: var(--text-main);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  #scene {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    cursor: grab;
+  }
+
+  #scene:active {
+    cursor: grabbing;
+  }
+
+  .scanlines {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.10;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0) 0px,
+      rgba(255, 255, 255, 0) 2px,
+      rgba(0, 0, 0, 0.42) 3px,
+      rgba(0, 0, 0, 0.42) 4px
+    );
+  }
+
+  #studio-toggle {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 30;
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-panel);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: opacity 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  }
+
+  #studio-toggle:hover {
+    border-color: var(--border-strong);
+    background: rgba(18, 22, 36, 0.94);
+  }
+
+  #studio-toggle.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-10px);
+  }
+
+  #studio {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    bottom: 14px;
+    width: 296px;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-panel);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.55);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+    overflow: hidden;
+  }
+
+  #studio.collapsed {
+    transform: translateX(-330px);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .studio-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid rgba(244, 196, 198, 0.11);
+    flex-shrink: 0;
+  }
+
+  .studio-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #fff0f0;
+  }
+
+  .seed-badge {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 2px 6px;
+    border-radius: 6px;
+  }
+
+  .icon-btn {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(244, 196, 198, 0.16);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .icon-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: var(--border-strong);
+  }
+
+  .studio-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 13px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .studio-body::-webkit-scrollbar {
+    width: 5px;
+  }
+  .studio-body::-webkit-scrollbar-thumb {
+    background: rgba(244, 196, 198, 0.18);
+    border-radius: 99px;
+  }
+
+  .sec-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .action-btn {
+    flex: 1;
+    appearance: none;
+    background: rgba(239, 131, 84, 0.16);
+    border: 1px solid rgba(239, 131, 84, 0.42);
+    color: #ffe3d3;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 7px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.16s ease, transform 0.12s ease, border-color 0.16s ease;
+    text-align: center;
+  }
+
+  .action-btn:hover {
+    background: rgba(239, 131, 84, 0.28);
+    border-color: rgba(255, 174, 132, 0.72);
+  }
+
+  .action-btn:active {
+    transform: scale(0.97);
+  }
+
+  .action-btn.secondary {
+    background: rgba(244, 196, 198, 0.08);
+    border-color: rgba(244, 196, 198, 0.20);
+    color: var(--text-main);
+  }
+
+  .action-btn.secondary:hover {
+    background: rgba(244, 196, 198, 0.18);
+    border-color: var(--border-strong);
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+
+  .chip-btn {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(244, 196, 198, 0.14);
+    color: rgba(243, 220, 222, 0.80);
+    font-family: inherit;
+    font-size: 10.5px;
+    padding: 5px 7px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .chip-btn:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(244, 196, 198, 0.34);
+  }
+
+  .chip-btn.active {
+    background: var(--accent-soft);
+    border-color: rgba(239, 131, 84, 0.58);
+    color: #fff2eb;
+  }
+
+  .swatch-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+  }
+
+  .palette-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .pal-btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(244, 196, 198, 0.15);
+    color: rgba(243, 220, 222, 0.82);
+    font-family: inherit;
+    font-size: 10.5px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .pal-btn:hover {
+    background: rgba(255, 255, 255, 0.11);
+  }
+
+  .pal-btn.active {
+    background: rgba(244, 196, 198, 0.18);
+    border-color: rgba(255, 212, 214, 0.60);
+    color: #ffffff;
+  }
+
+  .seg-row {
+    display: flex;
+    gap: 4px;
+  }
+
+  .seg-btn {
+    flex: 1;
+    appearance: none;
+    padding: 5px 4px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(244, 196, 198, 0.14);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .seg-btn.active {
+    background: var(--accent-soft);
+    border-color: rgba(239, 131, 84, 0.56);
+    color: #fff2eb;
+  }
+
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .slider-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+    color: var(--text-main);
+  }
+
+  .slider-val {
+    color: #ffb899;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    height: 4px;
+    appearance: none;
+    background: rgba(244, 196, 198, 0.18);
+    border-radius: 99px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #f59c72;
+    border: 1px solid #fff0eb;
+    cursor: pointer;
+  }
+
+  .ribbon-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+  }
+
+  .rib-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    cursor: pointer;
+    appearance: none;
+    transition: transform 0.14s ease, border-color 0.14s ease;
+    font-size: 9px;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .rib-dot:hover {
+    transform: scale(1.1);
+  }
+
+  .rib-dot.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(239, 131, 84, 0.55);
+  }
+
+  .caption-input {
+    width: 100%;
+    background: rgba(6, 8, 14, 0.72);
+    border: 1px solid rgba(244, 196, 198, 0.22);
+    border-radius: 8px;
+    padding: 6px 9px;
+    color: #fff0f2;
+    font-family: inherit;
+    font-size: 11px;
+    outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+    transition: border-color 0.15s ease;
+  }
+
+  .caption-input:focus {
+    border-color: rgba(239, 131, 84, 0.72);
+  }
+
+  .export-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 5px;
+  }
+
+  .studio-stats {
+    font-size: 9.5px;
+    color: var(--text-dim);
+    text-align: center;
+    padding-top: 2px;
+  }
+
+  #hud {
+    position: fixed;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(10, 13, 22, 0.72);
+    border: 1px solid var(--border-panel);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 0.52;
+    transition: opacity 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+    z-index: 20;
+    white-space: nowrap;
+  }
+
+  #hud:hover {
+    opacity: 0.98;
+    border-color: var(--border-strong);
+  }
+
+  #hud.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(14px);
+  }
+
+  #hud button {
+    appearance: none;
+    background: rgba(244, 196, 198, 0.08);
+    border: 1px solid rgba(244, 196, 198, 0.18);
+    color: #f4d4d6;
+    font-family: inherit;
+    font-size: 10.5px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  }
+
+  #hud button:hover {
+    background: rgba(244, 196, 198, 0.20);
+    border-color: var(--border-strong);
+    color: #fff;
+  }
+
+  #hud button.active {
+    background: var(--accent-soft);
+    border-color: rgba(244, 168, 120, 0.55);
+    color: #ffd9be;
+  }
+
+  .hud-sep {
+    width: 1px;
+    height: 13px;
+    background: rgba(244, 196, 198, 0.18);
+    margin: 0 2px;
+  }
+
+  .hud-hint {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding-left: 2px;
+  }
+
+  @media (max-width: 780px) {
+    #studio {
+      width: min(296px, 88vw);
+    }
+    #hud {
+      bottom: 10px;
+      padding: 5px 9px;
+      gap: 4px;
+      max-width: 95vw;
+      overflow-x: auto;
+    }
+    .hud-hint {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="scanlines"></div>
+
+<button id="studio-toggle" title="Open bouquet studio (Tab)">⚙ Studio</button>
+
+<aside id="studio" aria-label="Bouquet Studio">
+  <div class="studio-head">
+    <div class="studio-title">
+      <span>ASCII Florist</span>
+      <span id="seed-badge" class="seed-badge">#104821</span>
+    </div>
+    <button id="btn-collapse" class="icon-btn" title="Collapse panel (Tab)">✕</button>
+  </div>
+
+  <div class="studio-body">
+    <div class="btn-row">
+      <button id="btn-new-seed" class="action-btn" title="Generate new variation (N)">🎲 New Bouquet</button>
+      <button id="btn-full-rand" class="action-btn secondary" title="Randomize preset, palette and species">✨ Randomize</button>
+    </div>
+
+    <div>
+      <div class="sec-label"><span>Style / Preset</span></div>
+      <div id="preset-grid" class="grid-2"></div>
+    </div>
+
+    <div>
+      <div class="sec-label">
+        <span>Flowers in Bouquet</span>
+        <span id="species-count"></span>
+      </div>
+      <div id="species-grid" class="grid-2"></div>
+    </div>
+
+    <div>
+      <div class="sec-label"><span>Color Palette</span></div>
+      <div id="palette-row" class="palette-row"></div>
+    </div>
+
+    <div>
+      <div class="sec-label"><span>Bouquet Shape</span></div>
+      <div id="shape-row" class="seg-row"></div>
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-row">
+        <div class="slider-head"><span>Blooms</span><span id="val-count" class="slider-val">14</span></div>
+        <input id="rng-count" type="range" min="6" max="24" step="1" value="14">
+      </div>
+      <div class="slider-row">
+        <div class="slider-head"><span>Greenery</span><span id="val-green" class="slider-val">65%</span></div>
+        <input id="rng-green" type="range" min="0" max="100" step="5" value="65">
+      </div>
+      <div class="slider-row">
+        <div class="slider-head"><span>Rotation Speed</span><span id="val-speed" class="slider-val">1.0x</span></div>
+        <input id="rng-speed" type="range" min="0" max="2.5" step="0.1" value="1.0">
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-label"><span>Ribbon &amp; Wrap</span></div>
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <div id="ribbon-row" class="ribbon-pills"></div>
+        <div id="wrap-row" class="seg-row"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-label"><span>Caption Below Bouquet</span></div>
+      <input id="inp-caption" class="caption-input" type="text" maxlength="44" placeholder="e.g. for you ♥">
+    </div>
+
+    <div>
+      <div class="sec-label"><span>Export &amp; Save</span></div>
+      <div class="export-row">
+        <button id="btn-png" class="action-btn secondary" title="Download PNG snapshot">📸 PNG</button>
+        <button id="btn-ascii" class="action-btn secondary" title="Copy ASCII text">📋 ASCII</button>
+        <button id="btn-share" class="action-btn secondary" title="Copy recipe link/hash">🔗 Recipe</button>
+      </div>
+    </div>
+
+    <div id="studio-stats" class="studio-stats"></div>
+  </div>
+</aside>
+
+<div id="hud" aria-label="Quick controls">
+  <button id="btn-play" class="active" title="Pause / Play (Space)">Pause</button>
+  <button id="btn-glow" class="active" title="Toggle phosphor glow (G)">Glow: On</button>
+  <button id="btn-density" class="active" title="Cycle ASCII grid resolution (D)">Detailed</button>
+  <button id="btn-edges" class="active" title="Toggle petal edge contours (E)">Edges: On</button>
+  <button id="btn-hud-new" title="New bouquet variation (N)">🎲 New</button>
+  <button id="btn-reset" title="Reset view (R)">Reset</button>
+  <span class="hud-sep"></span>
+  <span class="hud-hint">drag · scroll · Tab panel · H hide</span>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0;
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function clamp(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function lerp3(c0, c1, t) {
+    return [
+      c0[0] + (c1[0] - c0[0]) * t,
+      c0[1] + (c1[1] - c0[1]) * t,
+      c0[2] + (c1[2] - c0[2]) * t
+    ];
+  }
+
+  function normalize3(x, y, z) {
+    const len = Math.hypot(x, y, z) || 1;
+    return [x / len, y / len, z / len];
+  }
+
+  function cross3(ax, ay, az, bx, by, bz) {
+    return [
+      ay * bz - az * by,
+      az * bx - ax * bz,
+      ax * by - ay * bx
+    ];
+  }
+
+  function buildBasis(dx, dy, dz) {
+    const f = normalize3(dx, dy, dz);
+    const refUp = Math.abs(f[1]) > 0.96 ? [1, 0, 0] : [0, 1, 0];
+    const rc = cross3(refUp[0], refUp[1], refUp[2], f[0], f[1], f[2]);
+    const r = normalize3(rc[0], rc[1], rc[2]);
+    const u = cross3(f[0], f[1], f[2], r[0], r[1], r[2]);
+    return { f, r, u };
+  }
+
+  function evalBezier(p0, p1, p2, p3, t) {
+    const mt = 1 - t;
+    const mt2 = mt * mt;
+    const t2 = t * t;
+    const a = mt2 * mt;
+    const b = 3 * mt2 * t;
+    const c = 3 * mt * t2;
+    const d = t2 * t;
+    return [
+      a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+      a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+      a * p0[2] + b * p1[2] + c * p2[2] + d * p3[2]
+    ];
+  }
+
+  const PALETTES = {
+    autumn: {
+      id: 'autumn', name: 'Autumn', swatch: '#eb7034',
+      primary:   { inner: [255, 240, 228], mid: [244, 166, 134], edge: [222, 82, 50] },
+      secondary: { inner: [132, 8, 12],    mid: [224, 24, 24],   edge: [255, 86, 56] },
+      accent:    { inner: [212, 68, 18],   mid: [242, 146, 36],  edge: [255, 212, 74] },
+      center: [255, 218, 48],
+      leaf: { base: [22, 74, 30], tip: [68, 146, 72] },
+      ribbon: 'terracotta',
+      sparkles: [[255, 218, 112], [255, 148, 108], [134, 242, 234], [255, 184, 196]]
+    },
+    wildflower: {
+      id: 'wildflower', name: 'Meadow', swatch: '#68b8ff',
+      primary:   { inner: [255, 250, 240], mid: [238, 242, 255], edge: [132, 184, 255] },
+      secondary: { inner: [128, 84, 216],  mid: [148, 126, 250], edge: [188, 178, 255] },
+      accent:    { inner: [220, 34, 48],   mid: [252, 92, 64],   edge: [255, 206, 78] },
+      center: [255, 212, 46],
+      leaf: { base: [28, 92, 46], tip: [92, 176, 98] },
+      ribbon: 'sage',
+      sparkles: [[124, 244, 236], [255, 224, 114], [166, 168, 255], [255, 148, 152]]
+    },
+    velvet: {
+      id: 'velvet', name: 'Burgundy', swatch: '#dc1e34',
+      primary:   { inner: [110, 4, 14],    mid: [204, 16, 28],   edge: [255, 68, 76] },
+      secondary: { inner: [255, 236, 236], mid: [248, 182, 190], edge: [228, 92, 112] },
+      accent:    { inner: [152, 12, 34],   mid: [228, 42, 68],   edge: [255, 140, 154] },
+      center: [255, 216, 128],
+      leaf: { base: [16, 62, 28], tip: [48, 124, 62] },
+      ribbon: 'crimson',
+      sparkles: [[255, 148, 168], [255, 224, 148], [255, 92, 108], [240, 218, 255]]
+    },
+    spring: {
+      id: 'spring', name: 'Spring', swatch: '#ffa8c4',
+      primary:   { inner: [255, 244, 246], mid: [255, 188, 208], edge: [248, 118, 162] },
+      secondary: { inner: [255, 248, 210], mid: [255, 224, 128], edge: [252, 176, 84] },
+      accent:    { inner: [232, 148, 204], mid: [246, 198, 232], edge: [255, 238, 248] },
+      center: [255, 218, 66],
+      leaf: { base: [34, 102, 56], tip: [104, 184, 116] },
+      ribbon: 'blush',
+      sparkles: [[255, 188, 216], [255, 232, 142], [156, 244, 226], [255, 228, 242]]
+    },
+    sunshine: {
+      id: 'sunshine', name: 'Sunshine', swatch: '#ffbe2e',
+      primary:   { inner: [255, 172, 20],  mid: [255, 212, 46],  edge: [255, 242, 128] },
+      secondary: { inner: [232, 74, 16],   mid: [248, 134, 34],  edge: [255, 196, 68] },
+      accent:    { inner: [255, 244, 226], mid: [255, 228, 168], edge: [252, 164, 72] },
+      center: [92, 42, 16],
+      leaf: { base: [26, 86, 36], tip: [76, 158, 72] },
+      ribbon: 'gold',
+      sparkles: [[255, 232, 92], [255, 166, 68], [148, 244, 224], [255, 246, 198]]
+    },
+    midnight: {
+      id: 'midnight', name: 'Midnight', swatch: '#a86bff',
+      primary:   { inner: [108, 44, 212],  mid: [164, 92, 255],  edge: [112, 228, 255] },
+      secondary: { inner: [212, 34, 146],  mid: [255, 88, 186],  edge: [255, 182, 232] },
+      accent:    { inner: [36, 132, 224],  mid: [82, 204, 255],  edge: [188, 255, 248] },
+      center: [152, 255, 236],
+      leaf: { base: [18, 64, 68], tip: [56, 148, 142] },
+      ribbon: 'mint',
+      sparkles: [[118, 246, 255], [216, 134, 255], [255, 124, 202], [164, 255, 214]]
+    },
+    ivory: {
+      id: 'ivory', name: 'Ivory', swatch: '#f8e6d8',
+      primary:   { inner: [255, 250, 244], mid: [250, 228, 212], edge: [242, 194, 174] },
+      secondary: { inner: [248, 232, 218], mid: [236, 206, 186], edge: [212, 162, 142] },
+      accent:    { inner: [255, 242, 204], mid: [246, 216, 148], edge: [255, 250, 238] },
+      center: [238, 196, 86],
+      leaf: { base: [38, 88, 58], tip: [114, 166, 128] },
+      ribbon: 'blush',
+      sparkles: [[255, 240, 212], [255, 208, 216], [176, 240, 234], [255, 250, 244]]
+    }
+  };
+
+  const SPECIES_LIST = [
+    { id: 'rose',      name: 'Rose',            tier: 'hero',   baseR: 0.44 },
+    { id: 'rosebud',   name: 'Rosebud',         tier: 'accent', baseR: 0.22 },
+    { id: 'tulip',     name: 'Tulip',           tier: 'mid',    baseR: 0.34 },
+    { id: 'orchid',    name: 'Orchid',          tier: 'hero',   baseR: 0.44 },
+    { id: 'calla',     name: 'Calla Lily',      tier: 'hero',   baseR: 0.48 },
+    { id: 'daisy',     name: 'Daisy',           tier: 'mid',    baseR: 0.36 },
+    { id: 'sunflower', name: 'Sunflower',       tier: 'hero',   baseR: 0.48 },
+    { id: 'peony',     name: 'Peony',           tier: 'hero',   baseR: 0.46 },
+    { id: 'lily',      name: 'Lily',            tier: 'hero',   baseR: 0.46 },
+    { id: 'protea',    name: 'Protea',          tier: 'mid',    baseR: 0.38 },
+    { id: 'spike',     name: 'Spike',           tier: 'accent', baseR: 0.28 },
+    { id: 'accents',   name: 'Berries / Twigs', tier: 'accent', baseR: 0.26 }
+  ];
+
+  const PRESETS = [
+    {
+      id: 'autumn', name: 'Autumn Luxe', dot: '#eb7034',
+      species: ['rose', 'rosebud', 'orchid', 'calla', 'protea', 'accents'],
+      palette: 'autumn', shape: 'dome', bloomCount: 14, greenery: 65, ribbon: 'auto', wrap: 'none'
+    },
+    {
+      id: 'wildflower', name: 'Wildflowers', dot: '#68b8ff',
+      species: ['daisy', 'spike', 'tulip', 'rosebud', 'accents'],
+      palette: 'wildflower', shape: 'airy', bloomCount: 16, greenery: 80, ribbon: 'auto', wrap: 'none'
+    },
+    {
+      id: 'velvet', name: 'Velvet Roses', dot: '#dc1e34',
+      species: ['rose', 'rosebud', 'peony'],
+      palette: 'velvet', shape: 'round', bloomCount: 14, greenery: 60, ribbon: 'crimson', wrap: 'none'
+    },
+    {
+      id: 'spring', name: 'Spring Pastel', dot: '#ffa8c4',
+      species: ['tulip', 'peony', 'lily', 'daisy'],
+      palette: 'spring', shape: 'dome', bloomCount: 14, greenery: 70, ribbon: 'blush', wrap: 'none'
+    },
+    {
+      id: 'sunshine', name: 'Golden Sun', dot: '#ffbe2e',
+      species: ['sunflower', 'tulip', 'daisy', 'orchid', 'accents'],
+      palette: 'sunshine', shape: 'asymmetric', bloomCount: 13, greenery: 65, ribbon: 'gold', wrap: 'none'
+    },
+    {
+      id: 'midnight', name: 'Midnight Garden', dot: '#a86bff',
+      species: ['rose', 'lily', 'orchid', 'spike', 'protea'],
+      palette: 'midnight', shape: 'airy', bloomCount: 14, greenery: 60, ribbon: 'mint', wrap: 'veil'
+    }
+  ];
+
+  const SHAPES = [
+    { id: 'dome',       name: 'Dome' },
+    { id: 'airy',       name: 'Airy' },
+    { id: 'round',      name: 'Round' },
+    { id: 'asymmetric', name: 'Asym' }
+  ];
+
+  const RIBBON_THEMES = {
+    terracotta: { css: '#d95826', dark: [142, 42, 14],  mid: [212, 78, 28],  lit: [246, 126, 62] },
+    crimson:    { css: '#cf1c32', dark: [118, 10, 22],  mid: [198, 24, 42],  lit: [248, 68, 82] },
+    blush:      { css: '#ebb0b8', dark: [158, 98, 106], mid: [222, 158, 168],lit: [252, 208, 214] },
+    gold:       { css: '#eab02c', dark: [154, 104, 14], mid: [224, 166, 36], lit: [255, 214, 92] },
+    mint:       { css: '#4cd8d4', dark: [28, 118, 118], mid: [62, 188, 186], lit: [128, 246, 240] },
+    sage:       { css: '#7ea888', dark: [64, 98, 72],   mid: [112, 152, 122],lit: [164, 206, 174] }
+  };
+
+  const RAMPS = [
+    ' .,:;-=+oO0@',
+    ' .:-~=+*#%@',
+    ' .,;:*+x#%@',
+    ' .,;:-=+/\\v^',
+    ' .,:oO0@*',
+    ' .:-=~#%@',
+    ' .,:;-=*oO#'
+  ];
+
+  const FLAG_DOUBLE_SIDED = 1;
+  const FLAG_EMISSIVE_TIP = 2;
+
+  class MeshBuilder {
+    constructor() {
+      this.vPos = [];
+      this.vNorm = [];
+      this.vCol = [];
+      this.vAttr = [];
+      this.triIdx = [];
+      this.triMeta = [];
+      this.vCount = 0;
+      this.tCount = 0;
+      this._partCounter = 1;
+    }
+
+    nextPartId() {
+      const id = this._partCounter;
+      this._partCounter = (this._partCounter % 65534) + 1;
+      return id;
+    }
+
+    addVertex(x, y, z, nx, ny, nz, r, g, b, ao = 1.0, rimBoost = 0.0, sway = 0.14) {
+      const nLen = Math.hypot(nx, ny, nz) || 1;
+      this.vPos.push(x, y, z);
+      this.vNorm.push(nx / nLen, ny / nLen, nz / nLen);
+      this.vCol.push(
+        clamp(Math.round(r), 0, 255),
+        clamp(Math.round(g), 0, 255),
+        clamp(Math.round(b), 0, 255)
+      );
+      this.vAttr.push(ao, rimBoost, sway);
+      return this.vCount++;
+    }
+
+    addTri(i0, i1, i2, rampId, flags, specPow, specStr, partId) {
+      this.triIdx.push(i0, i1, i2);
+      this.triMeta.push(
+        rampId & 255,
+        flags & 255,
+        clamp(Math.round(specPow), 1, 255),
+        clamp(Math.round(specStr * 255), 0, 255),
+        partId & 65535
+      );
+      this.tCount++;
+    }
+
+    addParametricPatch(uSteps, vSteps, evalPos, evalColor, evalAO, evalRim, evalSway, rampId, flags, specPow, specStr, partId) {
+      const cols = uSteps + 1;
+      const baseV = this.vCount;
+      const eps = 0.012;
+
+      for (let iv = 0; iv <= vSteps; iv++) {
+        const v = iv / vSteps;
+        const vNext = Math.min(1, v + eps);
+        const vPrev = Math.max(0, v - eps);
+        for (let iu = 0; iu <= uSteps; iu++) {
+          const u = iu / uSteps;
+          const uNext = Math.min(1, u + eps);
+          const uPrev = Math.max(0, u - eps);
+
+          const p = evalPos(u, v);
+          const pu1 = evalPos(uNext, v);
+          const pu0 = evalPos(uPrev, v);
+          const pv1 = evalPos(u, vNext);
+          const pv0 = evalPos(u, vPrev);
+
+          const n = cross3(
+            pu1[0] - pu0[0], pu1[1] - pu0[1], pu1[2] - pu0[2],
+            pv1[0] - pv0[0], pv1[1] - pv0[1], pv1[2] - pv0[2]
+          );
+          const c = evalColor(u, v, p);
+          const ao = evalAO(u, v, p);
+          const rim = evalRim ? evalRim(u, v, p) : 0;
+          const sw = evalSway ? evalSway(u, v, p) : 0.14;
+
+          this.addVertex(p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], ao, rim, sw);
+        }
+      }
+
+      for (let iv = 0; iv < vSteps; iv++) {
+        for (let iu = 0; iu < uSteps; iu++) {
+          const a = baseV + iv * cols + iu;
+          const b = a + 1;
+          const c = a + cols;
+          const d = c + 1;
+          this.addTri(a, b, d, rampId, flags, specPow, specStr, partId);
+          this.addTri(a, d, c, rampId, flags, specPow, specStr, partId);
+        }
+      }
+    }
+
+    pack() {
+      const vc = this.vCount;
+      const tc = this.tCount;
+      const vx = new Float32Array(vc);
+      const vy = new Float32Array(vc);
+      const vz = new Float32Array(vc);
+      const vnx = new Float32Array(vc);
+      const vny = new Float32Array(vc);
+      const vnz = new Float32Array(vc);
+      const vcr = new Uint8Array(vc);
+      const vcg = new Uint8Array(vc);
+      const vcb = new Uint8Array(vc);
+      const vao = new Float32Array(vc);
+      const vrim = new Float32Array(vc);
+      const vsway = new Float32Array(vc);
+
+      for (let i = 0; i < vc; i++) {
+        const i3 = i * 3;
+        vx[i] = this.vPos[i3];
+        vy[i] = this.vPos[i3 + 1];
+        vz[i] = this.vPos[i3 + 2];
+        vnx[i] = this.vNorm[i3];
+        vny[i] = this.vNorm[i3 + 1];
+        vnz[i] = this.vNorm[i3 + 2];
+        vcr[i] = this.vCol[i3];
+        vcg[i] = this.vCol[i3 + 1];
+        vcb[i] = this.vCol[i3 + 2];
+        vao[i] = this.vAttr[i3];
+        vrim[i] = this.vAttr[i3 + 1];
+        vsway[i] = this.vAttr[i3 + 2];
+      }
+
+      const ti0 = new Uint32Array(tc);
+      const ti1 = new Uint32Array(tc);
+      const ti2 = new Uint32Array(tc);
+      const tRamp = new Uint8Array(tc);
+      const tFlags = new Uint8Array(tc);
+      const tSpecPow = new Uint8Array(tc);
+      const tSpecStr = new Uint8Array(tc);
+      const tPart = new Uint16Array(tc);
+
+      for (let t = 0; t < tc; t++) {
+        const t3 = t * 3;
+        const t5 = t * 5;
+        ti0[t] = this.triIdx[t3];
+        ti1[t] = this.triIdx[t3 + 1];
+        ti2[t] = this.triIdx[t3 + 2];
+        tRamp[t] = this.triMeta[t5];
+        tFlags[t] = this.triMeta[t5 + 1];
+        tSpecPow[t] = this.triMeta[t5 + 2];
+        tSpecStr[t] = this.triMeta[t5 + 3];
+        tPart[t] = this.triMeta[t5 + 4];
+      }
+
+      return {
+        vCount: vc, tCount: tc,
+        vx, vy, vz, vnx, vny, vnz, vcr, vcg, vcb, vao, vrim, vsway,
+        ti0, ti1, ti2, tRamp, tFlags, tSpecPow, tSpecStr, tPart
+      };
+    }
+  }
+
+  class StemList {
+    constructor() {
+      this.segments = [];
+    }
+
+    addSegment(p0, p1, c0, c1, thick, sway0, sway1, partId, tipGlyph = 0, bodyGlyph = 0) {
+      this.segments.push({
+        x0: p0[0], y0: p0[1], z0: p0[2],
+        x1: p1[0], y1: p1[1], z1: p1[2],
+        r0: c0[0], g0: c0[1], b0: c0[2],
+        r1: c1[0], g1: c1[1], b1: c1[2],
+        thick, sway0, sway1, partId, tipGlyph, bodyGlyph
+      });
+    }
+
+    addBezier(p0, p1, p2, p3, segs, colStart, colEnd, thick, swayStart, swayEnd, partId, bodyGlyph = 0) {
+      let prev = p0;
+      for (let i = 1; i <= segs; i++) {
+        const t0 = (i - 1) / segs;
+        const t1 = i / segs;
+        const curr = evalBezier(p0, p1, p2, p3, t1);
+        this.addSegment(
+          prev, curr,
+          lerp3(colStart, colEnd, t0),
+          lerp3(colStart, colEnd, t1),
+          thick,
+          lerp(swayStart, swayEnd, t0),
+          lerp(swayStart, swayEnd, t1),
+          partId, 0, bodyGlyph
+        );
+        prev = curr;
+      }
+    }
+  }
+
+  function addCalyx(mesh, pos, dir, radius, leafCol, sway = 0.14) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    for (let k = 0; k < 5; k++) {
+      const ang = (k / 5) * Math.PI * 2 + 0.3;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        2, 3,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const w = (1 - v) * 0.22 * radius;
+          const out = (0.14 + 0.52 * v) * radius;
+          const fwd = (-0.12 + 0.24 * Math.sin(v * Math.PI * 0.85)) * radius;
+          return [
+            pos[0] + rx * out + tx * u * w + basis.f[0] * fwd,
+            pos[1] + ry * out + ty * u * w + basis.f[1] * fwd,
+            pos[2] + rz * out + tz * u * w + basis.f[2] * fwd
+          ];
+        },
+        (uu, v) => lerp3(leafCol.base, leafCol.tip, v),
+        (uu, v) => 0.45 + 0.55 * v,
+        (uu, v) => v > 0.7 ? 0.3 : 0.0,
+        () => sway,
+        3, FLAG_DOUBLE_SIDED, 14, 0.25, partId
+      );
+    }
+  }
+
+  function addRose(mesh, pos, dir, radius, colors, leafCol, rng, dense = false) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const goldenAngle = 2.399963229728653;
+    const petalCount = 20;
+    const steps = dense ? 4 : 5;
+
+    addCalyx(
+      mesh,
+      [pos[0] - basis.f[0] * radius * 0.04, pos[1] - basis.f[1] * radius * 0.04, pos[2] - basis.f[2] * radius * 0.04],
+      dir, radius * 0.62, leafCol, 0.14
+    );
+
+    for (let pIdx = 0; pIdx < petalCount; pIdx++) {
+      const t = pIdx / (petalCount - 1);
+      const angle = pIdx * goldenAngle + (rng() - 0.5) * 0.12;
+      const ca = Math.cos(angle), sa = Math.sin(angle);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+
+      const baseR = radius * (0.04 + 0.56 * Math.pow(t, 0.85));
+      const pH = radius * (0.44 + 0.44 * Math.pow(t, 0.65));
+      const pW = radius * (0.30 + 0.46 * Math.pow(t, 0.65));
+      const tiltOut = 0.18 + 1.15 * Math.pow(t, 0.90);
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        steps, steps,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const widthEnv = Math.sin(Math.pow(v, 0.52) * Math.PI * 0.88);
+          const notch = Math.exp(-u * u * 18) * 0.05 * radius * Math.pow(v, 2.0);
+          const phi = u * (0.76 + 0.40 * (1 - t));
+          const lipCurl = Math.pow(Math.max(0, v - 0.55) / 0.45, 2.0) * radius * (0.12 + 0.22 * t);
+          const outDist = baseR + v * pH * Math.sin(tiltOut) + lipCurl - (1 - Math.cos(phi)) * pW * 0.40;
+          const fwdDist = v * pH * Math.cos(tiltOut) + (1 - v) * radius * 0.06 - lipCurl * 0.38 - notch;
+          const sideDist = Math.sin(phi) * pW * widthEnv;
+          return [
+            pos[0] + rx * outDist + tx * sideDist + basis.f[0] * fwdDist,
+            pos[1] + ry * outDist + ty * sideDist + basis.f[1] * fwdDist,
+            pos[2] + rz * outDist + tz * sideDist + basis.f[2] * fwdDist
+          ];
+        },
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const c = lerp3(colors.inner, colors.mid, clamp(t * 0.92 + v * 0.35, 0, 1));
+          const rimMix = Math.pow(v, 1.4) * (0.55 + 0.45 * t);
+          return lerp3(c, colors.edge, clamp(rimMix * (0.60 + 0.40 * Math.abs(u)), 0, 1));
+        },
+        (uu, v) => clamp((0.26 + 0.74 * Math.pow(t, 0.65)) * (0.36 + 0.64 * Math.pow(v, 0.65)) + 0.06, 0.22, 1.0),
+        (uu, v) => v > 0.78 ? (v - 0.78) * 3.8 : 0.0,
+        () => 0.14 + 0.16 * t,
+        0, FLAG_DOUBLE_SIDED, 11, 0.20, partId
+      );
+    }
+  }
+
+  function addRoseBud(mesh, pos, dir, radius, colors, leafCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const goldenAngle = 2.399963229728653;
+
+    for (let k = 0; k < 7; k++) {
+      const t = k / 6;
+      const ang = k * goldenAngle;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        3, 4,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const bulge = Math.sin(Math.pow(v, 0.68) * Math.PI * 0.92);
+          const phi = u * 0.88;
+          const out = radius * (0.18 + 0.42 * bulge + 0.14 * t * v) - (1 - Math.cos(phi)) * radius * 0.22;
+          const fwd = radius * (1.35 * v);
+          const side = Math.sin(phi) * radius * 0.36 * bulge;
+          return [
+            pos[0] + rx * out + tx * side + basis.f[0] * fwd,
+            pos[1] + ry * out + ty * side + basis.f[1] * fwd,
+            pos[2] + rz * out + tz * side + basis.f[2] * fwd
+          ];
+        },
+        (uu, v) => lerp3(colors.inner, colors.edge, clamp(v * 0.85 + t * 0.25, 0, 1)),
+        (uu, v) => 0.42 + 0.58 * v,
+        (uu, v) => v > 0.72 ? (v - 0.72) * 2.5 : 0.0,
+        () => 0.22,
+        0, FLAG_DOUBLE_SIDED, 12, 0.24, partId
+      );
+    }
+
+    for (let s = 0; s < 5; s++) {
+      const ang = (s / 5) * Math.PI * 2 + 0.25;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        2, 3,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const flare = v > 0.65 ? (v - 0.65) * 0.65 : 0;
+          const out = radius * (0.20 + 0.38 * Math.sin(v * Math.PI * 0.65) + flare);
+          const fwd = radius * (-0.06 + 1.05 * v);
+          const w = u * radius * 0.18 * (1 - v * 0.85);
+          return [
+            pos[0] + rx * out + tx * w + basis.f[0] * fwd,
+            pos[1] + ry * out + ty * w + basis.f[1] * fwd,
+            pos[2] + rz * out + tz * w + basis.f[2] * fwd
+          ];
+        },
+        (uu, v) => lerp3(leafCol.base, leafCol.tip, v),
+        (uu, v) => 0.55 + 0.45 * v,
+        () => 0.1,
+        () => 0.24,
+        3, FLAG_DOUBLE_SIDED, 14, 0.25, partId
+      );
+    }
+  }
+
+  function addTulip(mesh, pos, dir, radius, colors, centerCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    for (let tier = 0; tier < 2; tier++) {
+      for (let k = 0; k < 3; k++) {
+        const ang = (k / 3) * Math.PI * 2 + tier * (Math.PI / 3);
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const rx = basis.r[0] * ca + basis.u[0] * sa;
+        const ry = basis.r[1] * ca + basis.u[1] * sa;
+        const rz = basis.r[2] * ca + basis.u[2] * sa;
+        const tx = -basis.r[0] * sa + basis.u[0] * ca;
+        const ty = -basis.r[1] * sa + basis.u[1] * ca;
+        const tz = -basis.r[2] * sa + basis.u[2] * ca;
+        const partId = mesh.nextPartId();
+        const rScale = tier === 0 ? 0.90 : 1.02;
+
+        mesh.addParametricPatch(
+          5, 6,
+          (uu, v) => {
+            const u = uu * 2 - 1;
+            const cup = Math.sin(Math.pow(v, 0.55) * Math.PI * 0.88);
+            const phi = u * 0.86;
+            const out = radius * rScale * (0.08 + 0.44 * Math.sin(v * Math.PI * 0.72) + 0.08 * tier) - (1 - Math.cos(phi)) * radius * 0.24;
+            const fwd = radius * (1.28 * v);
+            const side = Math.sin(phi) * radius * 0.44 * cup;
+            return [
+              pos[0] + rx * out + tx * side + basis.f[0] * fwd,
+              pos[1] + ry * out + ty * side + basis.f[1] * fwd,
+              pos[2] + rz * out + tz * side + basis.f[2] * fwd
+            ];
+          },
+          (uu, v) => {
+            const c = lerp3(colors.inner, colors.mid, clamp(v * 0.95, 0, 1));
+            return lerp3(c, colors.edge, Math.pow(v, 1.5) * 0.85);
+          },
+          (uu, v) => 0.38 + 0.62 * Math.pow(v, 0.55),
+          (uu, v) => v > 0.78 ? (v - 0.78) * 3.2 : 0.0,
+          () => 0.16,
+          1, FLAG_DOUBLE_SIDED, 24, 0.62, partId
+        );
+      }
+    }
+
+    const cId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      5, 3,
+      (uu, v) => {
+        const a = uu * Math.PI * 2;
+        const rC = radius * 0.11 * Math.sin(v * Math.PI * 0.85);
+        const fwd = radius * (0.28 + 0.42 * v);
+        return [
+          pos[0] + basis.f[0] * fwd + (basis.r[0] * Math.cos(a) + basis.u[0] * Math.sin(a)) * rC,
+          pos[1] + basis.f[1] * fwd + (basis.r[1] * Math.cos(a) + basis.u[1] * Math.sin(a)) * rC,
+          pos[2] + basis.f[2] * fwd + (basis.r[2] * Math.cos(a) + basis.u[2] * Math.sin(a)) * rC
+        ];
+      },
+      () => centerCol,
+      () => 0.85,
+      () => 0.3,
+      () => 0.12,
+      4, FLAG_EMISSIVE_TIP, 16, 0.35, cId
+    );
+  }
+
+  function addCymbidiumOrchid(mesh, pos, dir, radius, colors, centerCol, leafCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    addCalyx(mesh, pos, dir, radius * 0.32, leafCol, 0.14);
+
+    const angles = [Math.PI * 0.5, Math.PI * 0.10, Math.PI * 0.90, -Math.PI * 0.24, -Math.PI * 0.76];
+    const hoods = [0.46, 0.22, 0.22, 0.14, 0.14];
+
+    for (let k = 0; k < 5; k++) {
+      const ang = angles[k];
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const ax = basis.r[0] * ca + basis.u[0] * sa;
+      const ay = basis.r[1] * ca + basis.u[1] * sa;
+      const az = basis.r[2] * ca + basis.u[2] * sa;
+      const sx = -basis.r[0] * sa + basis.u[0] * ca;
+      const sy = -basis.r[1] * sa + basis.u[1] * ca;
+      const sz = -basis.r[2] * sa + basis.u[2] * ca;
+      const hood = hoods[k];
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        4, 6,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const widthEnv = Math.sin(Math.pow(v, 0.68) * Math.PI) * 0.33 * radius;
+          const cup = (1 - u * u) * 0.12 * radius * Math.sin(v * Math.PI);
+          const radial = (0.08 + 0.96 * v) * radius;
+          const fwd = (Math.sin(v * Math.PI * 0.85) * hood - 0.10 * v * v) * radius + cup;
+          return [
+            pos[0] + ax * radial + sx * u * widthEnv + basis.f[0] * fwd,
+            pos[1] + ay * radial + sy * u * widthEnv + basis.f[1] * fwd,
+            pos[2] + az * radial + sz * u * widthEnv + basis.f[2] * fwd
+          ];
+        },
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          let c = lerp3(colors.inner, colors.mid, v);
+          c = lerp3(c, colors.edge, Math.pow(v, 1.65) * 0.65);
+          if (Math.abs(u) < 0.13) {
+            c = lerp3(c, colors.inner, 0.35 * (1 - v));
+          }
+          return c;
+        },
+        (uu, v) => 0.48 + 0.52 * Math.pow(v, 0.5),
+        (uu, v) => (Math.abs(uu - 0.5) > 0.36 || v > 0.82) ? 0.55 : 0.0,
+        () => 0.18,
+        1, FLAG_DOUBLE_SIDED, 22, 0.68, partId
+      );
+    }
+
+    const lipId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      5, 6,
+      (uu, v) => {
+        const u = uu * 2 - 1;
+        const tubeWrap = u * 1.18;
+        const width = 0.24 * radius * Math.sin(Math.pow(v, 0.58) * Math.PI * 0.92);
+        const fwd = (0.06 + 0.58 * v) * radius;
+        const drop = (-0.05 - 0.38 * Math.pow(v, 1.35)) * radius;
+        const side = Math.sin(tubeWrap) * width;
+        const cupUp = (1 - Math.cos(tubeWrap)) * 0.15 * radius * (1 - 0.45 * v);
+        return [
+          pos[0] + basis.r[0] * side + basis.u[0] * (drop + cupUp) + basis.f[0] * fwd,
+          pos[1] + basis.r[1] * side + basis.u[1] * (drop + cupUp) + basis.f[1] * fwd,
+          pos[2] + basis.r[2] * side + basis.u[2] * (drop + cupUp) + basis.f[2] * fwd
+        ];
+      },
+      (uu, v) => {
+        const u = uu * 2 - 1;
+        let c = lerp3(centerCol, [255, 244, 150], clamp(v * 0.65, 0, 1));
+        const spotWave = Math.sin(u * 16.0 + v * 13.0) * Math.cos(u * 10.5 - v * 17.0);
+        if (v > 0.38 && spotWave > 0.45) {
+          c = lerp3(c, colors.inner, 0.88);
+        }
+        return c;
+      },
+      (uu, v) => 0.72 + 0.28 * v,
+      (uu, v) => v > 0.78 ? 0.65 : 0.0,
+      () => 0.20,
+      1, FLAG_DOUBLE_SIDED | FLAG_EMISSIVE_TIP, 22, 0.60, lipId
+    );
+  }
+
+  function addCallaLily(mesh, pos, dir, radius, colors, centerCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const spatheId = mesh.nextPartId();
+
+    mesh.addParametricPatch(
+      14, 9,
+      (u, v) => {
+        const theta = (u - 0.5) * Math.PI * 2.20;
+        const flare = Math.pow(v, 1.42);
+        const beak = Math.pow(Math.max(0, Math.cos(theta * 0.5)), 2.2) * 0.56 * radius * Math.pow(v, 1.25);
+        const rTube = radius * (0.06 + 0.42 * flare) * (1 + 0.16 * u);
+        const arch = -0.20 * radius * Math.pow(v, 2.1) * Math.cos(theta * 0.5);
+        const ax = Math.sin(theta) * rTube;
+        const ay = Math.cos(theta) * rTube + arch;
+        const fwd = v * radius * 0.88 + beak;
+        return [
+          pos[0] + basis.r[0] * ax + basis.u[0] * ay + basis.f[0] * fwd,
+          pos[1] + basis.r[1] * ax + basis.u[1] * ay + basis.f[1] * fwd,
+          pos[2] + basis.r[2] * ax + basis.u[2] * ay + basis.f[2] * fwd
+        ];
+      },
+      (u, v) => {
+        const c = lerp3(colors.inner, colors.mid, clamp(v * 1.15, 0, 1));
+        return lerp3(c, colors.edge, Math.pow(v, 1.45) * (0.50 + 0.42 * (1 - Math.abs(u - 0.5) * 2)));
+      },
+      (u, v) => 0.36 + 0.64 * Math.pow(v, 0.7),
+      (u, v) => v > 0.80 ? (v - 0.80) * 3.5 : 0.0,
+      (u, v) => 0.12 + 0.24 * v,
+      1, FLAG_DOUBLE_SIDED, 26, 0.76, spatheId
+    );
+
+    const spadixId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      5, 4,
+      (uu, v) => {
+        const a = uu * Math.PI * 2;
+        const rSp = 0.036 * radius * (1 - 0.42 * v);
+        const fwd = (0.06 + 0.68 * v) * radius;
+        return [
+          pos[0] + basis.f[0] * fwd + (basis.r[0] * Math.cos(a) + basis.u[0] * Math.sin(a)) * rSp,
+          pos[1] + basis.f[1] * fwd + (basis.r[1] * Math.cos(a) + basis.u[1] * Math.sin(a)) * rSp,
+          pos[2] + basis.f[2] * fwd + (basis.r[2] * Math.cos(a) + basis.u[2] * Math.sin(a)) * rSp
+        ];
+      },
+      () => centerCol,
+      () => 0.95,
+      () => 0.5,
+      () => 0.16,
+      4, FLAG_EMISSIVE_TIP, 18, 0.4, spadixId
+    );
+  }
+
+  function addDaisy(mesh, pos, dir, radius, colors, centerCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const coreId = mesh.nextPartId();
+
+    mesh.addParametricPatch(
+      8, 4,
+      (uu, v) => {
+        const a = uu * Math.PI * 2;
+        const phi = v * Math.PI * 0.48;
+        const sp = Math.sin(phi), cp = Math.cos(phi);
+        const rDome = radius * 0.27;
+        return [
+          pos[0] + (basis.r[0] * sp * Math.cos(a) + basis.u[0] * sp * Math.sin(a)) * rDome + basis.f[0] * (cp * rDome * 0.65 + 0.03 * radius),
+          pos[1] + (basis.r[1] * sp * Math.cos(a) + basis.u[1] * sp * Math.sin(a)) * rDome + basis.f[1] * (cp * rDome * 0.65 + 0.03 * radius),
+          pos[2] + (basis.r[2] * sp * Math.cos(a) + basis.u[2] * sp * Math.sin(a)) * rDome + basis.f[2] * (cp * rDome * 0.65 + 0.03 * radius)
+        ];
+      },
+      (uu, v) => lerp3(centerCol, [216, 138, 22], v * 0.6),
+      (uu, v) => 0.72 + 0.28 * (1 - v),
+      () => 0.3,
+      () => 0.10,
+      4, FLAG_EMISSIVE_TIP, 14, 0.30, coreId
+    );
+
+    const petalCount = 18;
+    for (let ip = 0; ip < petalCount; ip++) {
+      const ang = (ip / petalCount) * Math.PI * 2;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+      const partId = mesh.nextPartId();
+      const tilt = (ip % 2 === 0 ? 1.24 : 1.38);
+
+      mesh.addParametricPatch(
+        2, 5,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const pW = radius * 0.115 * Math.sin(Math.pow(v, 0.5) * Math.PI * 0.90);
+          const pLen = radius * 0.82;
+          const out = radius * 0.22 + Math.sin(tilt * (0.75 + 0.28 * v)) * v * pLen;
+          const fwd = 0.04 * radius + Math.cos(tilt * (0.75 + 0.28 * v)) * v * pLen;
+          return [
+            pos[0] + rx * out + tx * u * pW + basis.f[0] * fwd,
+            pos[1] + ry * out + ty * u * pW + basis.f[1] * fwd,
+            pos[2] + rz * out + tz * u * pW + basis.f[2] * fwd
+          ];
+        },
+        (uu, v) => lerp3(colors.mid, colors.edge, v),
+        (uu, v) => 0.52 + 0.48 * v,
+        (uu, v) => v > 0.72 ? 0.55 : 0.0,
+        () => 0.18,
+        2, FLAG_DOUBLE_SIDED, 12, 0.22, partId
+      );
+    }
+  }
+
+  function addSunflower(mesh, pos, dir, radius, colors, leafCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    addCalyx(mesh, pos, dir, radius * 0.72, leafCol, 0.12);
+
+    const discId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      10, 5,
+      (uu, v) => {
+        const a = uu * Math.PI * 2;
+        const rDisc = radius * 0.46 * v;
+        const bump = (1 - v * v) * 0.09 * radius + 0.02 * radius * Math.cos(v * 14);
+        return [
+          pos[0] + (basis.r[0] * Math.cos(a) + basis.u[0] * Math.sin(a)) * rDisc + basis.f[0] * bump,
+          pos[1] + (basis.r[1] * Math.cos(a) + basis.u[1] * Math.sin(a)) * rDisc + basis.f[1] * bump,
+          pos[2] + (basis.r[2] * Math.cos(a) + basis.u[2] * Math.sin(a)) * rDisc + basis.f[2] * bump
+        ];
+      },
+      (uu, v) => v > 0.72 ? lerp3([96, 46, 16], [194, 128, 22], (v - 0.72) / 0.28) : lerp3([54, 24, 10], [92, 44, 16], v / 0.72),
+      (uu, v) => 0.45 + 0.45 * v,
+      () => 0.15,
+      () => 0.08,
+      4, 0, 8, 0.12, discId
+    );
+
+    const petalGoldA = [255, 198, 22];
+    const petalGoldB = [255, 232, 68];
+    const petalEdge = colors ? lerp3(petalGoldB, colors.edge, 0.25) : petalGoldB;
+
+    for (let tier = 0; tier < 2; tier++) {
+      const count = 13;
+      for (let ip = 0; ip < count; ip++) {
+        const ang = (ip / count) * Math.PI * 2 + tier * 0.24;
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const rx = basis.r[0] * ca + basis.u[0] * sa;
+        const ry = basis.r[1] * ca + basis.u[1] * sa;
+        const rz = basis.r[2] * ca + basis.u[2] * sa;
+        const tx = -basis.r[0] * sa + basis.u[0] * ca;
+        const ty = -basis.r[1] * sa + basis.u[1] * ca;
+        const tz = -basis.r[2] * sa + basis.u[2] * ca;
+        const partId = mesh.nextPartId();
+        const tilt = tier === 0 ? 1.32 : 1.48;
+
+        mesh.addParametricPatch(
+          2, 5,
+          (uu, v) => {
+            const u = uu * 2 - 1;
+            const pW = radius * 0.145 * Math.sin(Math.pow(v, 0.55) * Math.PI * 0.94) * (1 - 0.25 * v);
+            const pLen = radius * 0.64;
+            const out = radius * 0.40 + Math.sin(tilt * (0.85 + 0.18 * v)) * v * pLen;
+            const fwd = (0.04 - tier * 0.03) * radius + Math.cos(tilt * (0.85 + 0.24 * v)) * v * pLen;
+            return [
+              pos[0] + rx * out + tx * u * pW + basis.f[0] * fwd,
+              pos[1] + ry * out + ty * u * pW + basis.f[1] * fwd,
+              pos[2] + rz * out + tz * u * pW + basis.f[2] * fwd
+            ];
+          },
+          (uu, v) => lerp3(petalGoldA, petalEdge, v),
+          (uu, v) => 0.48 + 0.52 * v,
+          (uu, v) => v > 0.72 ? 0.55 : 0.0,
+          () => 0.16,
+          2, FLAG_DOUBLE_SIDED, 14, 0.25, partId
+        );
+      }
+    }
+  }
+
+  function addPeony(mesh, pos, dir, radius, colors, centerCol, leafCol, rng, dense = false) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    addCalyx(mesh, pos, dir, radius * 0.55, leafCol, 0.12);
+    const goldenAngle = 2.399963229728653;
+    const count = 24;
+    const steps = dense ? 4 : 5;
+
+    for (let pIdx = 0; pIdx < count; pIdx++) {
+      const t = pIdx / (count - 1);
+      const ang = pIdx * goldenAngle + (rng() - 0.5) * 0.16;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+
+      const baseR = radius * (0.04 + 0.44 * Math.pow(t, 0.78));
+      const pH = radius * (0.48 + 0.36 * Math.pow(t, 0.6));
+      const pW = radius * (0.34 + 0.42 * Math.pow(t, 0.65));
+      const tiltOut = 0.25 + 1.08 * Math.pow(t, 0.85);
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        steps, 4,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const ruffle = Math.sin(u * Math.PI * 3.0 + pIdx) * 0.065 * radius * Math.pow(v, 1.4);
+          const widthEnv = Math.sin(Math.pow(v, 0.50) * Math.PI * 0.90);
+          const phi = u * (0.82 + 0.36 * (1 - t));
+          const outDist = baseR + v * pH * Math.sin(tiltOut) + ruffle - (1 - Math.cos(phi)) * pW * 0.36;
+          const fwdDist = v * pH * Math.cos(tiltOut) + 0.10 * radius + ruffle * 0.5;
+          const sideDist = Math.sin(phi) * pW * widthEnv;
+          return [
+            pos[0] + rx * outDist + tx * sideDist + basis.f[0] * fwdDist,
+            pos[1] + ry * outDist + ty * sideDist + basis.f[1] * fwdDist,
+            pos[2] + rz * outDist + tz * sideDist + basis.f[2] * fwdDist
+          ];
+        },
+        (uu, v) => {
+          let c = lerp3(colors.inner, colors.mid, clamp(t * 0.85 + v * 0.35, 0, 1));
+          if (t < 0.20) c = lerp3(c, centerCol, 0.35);
+          return lerp3(c, colors.edge, Math.pow(v, 1.45) * (0.55 + 0.45 * t));
+        },
+        (uu, v) => clamp((0.28 + 0.72 * Math.pow(t, 0.6)) * (0.40 + 0.60 * v), 0.24, 1.0),
+        (uu, v) => v > 0.74 ? 0.55 : 0.0,
+        () => 0.18 + 0.14 * t,
+        0, FLAG_DOUBLE_SIDED, 10, 0.18, partId
+      );
+    }
+  }
+
+  function addLily(mesh, stems, pos, dir, radius, colors, centerCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    for (let k = 0; k < 6; k++) {
+      const ang = (k / 6) * Math.PI * 2 + (k % 2) * 0.04;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const rx = basis.r[0] * ca + basis.u[0] * sa;
+      const ry = basis.r[1] * ca + basis.u[1] * sa;
+      const rz = basis.r[2] * ca + basis.u[2] * sa;
+      const tx = -basis.r[0] * sa + basis.u[0] * ca;
+      const ty = -basis.r[1] * sa + basis.u[1] * ca;
+      const tz = -basis.r[2] * sa + basis.u[2] * ca;
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        4, 7,
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          const widthEnv = Math.sin(Math.pow(v, 0.62) * Math.PI) * 0.30 * radius;
+
+          const flare = Math.pow(v, 1.25) * 0.92 * radius;
+          const recurve = v > 0.55 ? Math.pow((v - 0.55) / 0.45, 2.0) * 0.34 * radius : 0;
+          const fwd = (0.72 * v - recurve) * radius;
+          const crease = Math.abs(u) * 0.06 * radius * Math.sin(v * Math.PI);
+          return [
+            pos[0] + rx * (flare + 0.05 * radius) + tx * u * widthEnv + basis.f[0] * (fwd + crease),
+            pos[1] + ry * (flare + 0.05 * radius) + ty * u * widthEnv + basis.f[1] * (fwd + crease),
+            pos[2] + rz * (flare + 0.05 * radius) + tz * u * widthEnv + basis.f[2] * (fwd + crease)
+          ];
+        },
+        (uu, v) => {
+          const u = uu * 2 - 1;
+          let c = lerp3(colors.inner, colors.mid, clamp(v * 1.1, 0, 1));
+          c = lerp3(c, colors.edge, Math.pow(v, 1.45) * 0.72);
+          if (v < 0.65 && Math.sin(u * 14 + v * 16) > 0.62) {
+            c = lerp3(c, colors.inner, 0.85);
+          }
+          return c;
+        },
+        (uu, v) => 0.44 + 0.56 * Math.pow(v, 0.5),
+        (uu, v) => (Math.abs(uu - 0.5) > 0.36 || v > 0.78) ? 0.5 : 0.0,
+        () => 0.18,
+        1, FLAG_DOUBLE_SIDED, 22, 0.58, partId
+      );
+
+      const sMid = [
+        pos[0] + rx * 0.18 * radius + basis.f[0] * 0.48 * radius,
+        pos[1] + ry * 0.18 * radius + basis.f[1] * 0.48 * radius,
+        pos[2] + rz * 0.18 * radius + basis.f[2] * 0.48 * radius
+      ];
+      const sTip = [
+        pos[0] + rx * 0.34 * radius + basis.f[0] * 0.82 * radius,
+        pos[1] + ry * 0.34 * radius + basis.f[1] * 0.82 * radius,
+        pos[2] + rz * 0.34 * radius + basis.f[2] * 0.82 * radius
+      ];
+      stems.addSegment(pos, sMid, [160, 210, 130], [230, 240, 180], 1, 0.14, 0.28, mesh.nextPartId(), 0);
+      stems.addSegment(sMid, sTip, [230, 240, 180], centerCol, 1, 0.28, 0.36, mesh.nextPartId(), 42);
+    }
+  }
+
+  function addPincushionProtea(mesh, stems, pos, dir, radius, colors, rng) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const coreId = mesh.nextPartId();
+
+    mesh.addParametricPatch(
+      8, 5,
+      (uu, v) => {
+        const a = uu * Math.PI * 2;
+        const phi = v * Math.PI * 0.56;
+        const sp = Math.sin(phi), cp = Math.cos(phi);
+        const rCore = radius * 0.36;
+        return [
+          pos[0] + (basis.r[0] * sp * Math.cos(a) + basis.u[0] * sp * Math.sin(a) + basis.f[0] * cp) * rCore,
+          pos[1] + (basis.r[1] * sp * Math.cos(a) + basis.u[1] * sp * Math.sin(a) + basis.f[1] * cp) * rCore,
+          pos[2] + (basis.r[2] * sp * Math.cos(a) + basis.u[2] * sp * Math.sin(a) + basis.f[2] * cp) * rCore
+        ];
+      },
+      (uu, v) => lerp3(colors.inner, colors.mid, 1 - v * 0.45),
+      (uu, v) => 0.45 + 0.4 * (1 - v),
+      () => 0.0,
+      () => 0.10,
+      4, 0, 10, 0.2, coreId
+    );
+
+    const goldenAngle = 2.399963229728653;
+    const pinCount = 52;
+    for (let i = 0; i < pinCount; i++) {
+      const t = (i + 0.5) / pinCount;
+      const phi = Math.acos(1 - t * 1.12);
+      const theta = i * goldenAngle + (rng() - 0.5) * 0.08;
+      const sp = Math.sin(phi), cp = Math.cos(phi);
+      const dx = basis.r[0] * sp * Math.cos(theta) + basis.u[0] * sp * Math.sin(theta) + basis.f[0] * cp;
+      const dy = basis.r[1] * sp * Math.cos(theta) + basis.u[1] * sp * Math.sin(theta) + basis.f[1] * cp;
+      const dz = basis.r[2] * sp * Math.cos(theta) + basis.u[2] * sp * Math.sin(theta) + basis.f[2] * cp;
+
+      const pinLen = radius * (0.48 + 0.58 * (0.8 + 0.2 * rng()));
+      const pBase = [pos[0] + dx * radius * 0.34, pos[1] + dy * radius * 0.34, pos[2] + dz * radius * 0.34];
+      const pMid = [
+        pos[0] + dx * (radius * 0.34 + pinLen * 0.55) + basis.f[0] * (radius * 0.04 * sp),
+        pos[1] + dy * (radius * 0.34 + pinLen * 0.55) + basis.f[1] * (radius * 0.04 * sp),
+        pos[2] + dz * (radius * 0.34 + pinLen * 0.55) + basis.f[2] * (radius * 0.04 * sp)
+      ];
+      const pTip = [
+        pos[0] + dx * (radius * 0.34 + pinLen) + basis.f[0] * (radius * 0.14 * sp),
+        pos[1] + dy * (radius * 0.34 + pinLen) + basis.f[1] * (radius * 0.14 * sp),
+        pos[2] + dz * (radius * 0.34 + pinLen) + basis.f[2] * (radius * 0.14 * sp)
+      ];
+      const partId = mesh.nextPartId();
+      stems.addSegment(pBase, pMid, colors.inner, colors.mid, 1, 0.14, 0.28, partId, 0);
+      stems.addSegment(pMid, pTip, colors.mid, colors.edge, 1, 0.28, 0.42, partId, 42);
+    }
+  }
+
+  function addFlowerSpike(mesh, stems, pos, dir, radius, colors, leafCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const spikeLen = radius * 2.4;
+    const tip = [
+      pos[0] + basis.f[0] * spikeLen,
+      pos[1] + basis.f[1] * spikeLen + 0.12 * radius,
+      pos[2] + basis.f[2] * spikeLen
+    ];
+    const ctrl1 = [pos[0] + basis.f[0] * spikeLen * 0.35, pos[1] + basis.f[1] * spikeLen * 0.35 + 0.05, pos[2] + basis.f[2] * spikeLen * 0.35];
+    const ctrl2 = [pos[0] + basis.f[0] * spikeLen * 0.75, pos[1] + basis.f[1] * spikeLen * 0.75 + 0.10, pos[2] + basis.f[2] * spikeLen * 0.75];
+    stems.addBezier(pos, ctrl1, ctrl2, tip, 7, leafCol.base, leafCol.tip, 1, 0.14, 0.44, mesh.nextPartId());
+
+    const floretCount = 16;
+    const goldenAngle = 2.399963229728653;
+    for (let i = 0; i < floretCount; i++) {
+      const t = 0.25 + (i / (floretCount - 1)) * 0.74;
+      const pt = evalBezier(pos, ctrl1, ctrl2, tip, t);
+      const scale = (1.0 - (t - 0.25) * 0.65) * radius * 0.34;
+      const ang = i * goldenAngle;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const outDir = normalize3(
+        basis.r[0] * ca * 0.85 + basis.u[0] * sa * 0.85 + basis.f[0] * 0.45,
+        basis.r[1] * ca * 0.85 + basis.u[1] * sa * 0.85 + basis.f[1] * 0.45,
+        basis.r[2] * ca * 0.85 + basis.u[2] * sa * 0.85 + basis.f[2] * 0.45
+      );
+      const fb = buildBasis(outDir[0], outDir[1], outDir[2]);
+      const partId = mesh.nextPartId();
+
+      mesh.addParametricPatch(
+        4, 3,
+        (uu, v) => {
+          const a = uu * Math.PI * 2;
+          const rFl = scale * (0.18 + 0.68 * Math.sin(v * Math.PI * 0.72));
+          const fwd = v * scale * 1.15;
+          return [
+            pt[0] + fb.f[0] * fwd + (fb.r[0] * Math.cos(a) + fb.u[0] * Math.sin(a)) * rFl,
+            pt[1] + fb.f[1] * fwd + (fb.r[1] * Math.cos(a) + fb.u[1] * Math.sin(a)) * rFl,
+            pt[2] + fb.f[2] * fwd + (fb.r[2] * Math.cos(a) + fb.u[2] * Math.sin(a)) * rFl
+          ];
+        },
+        (uu, v) => lerp3(colors.inner, colors.edge, v),
+        (uu, v) => 0.48 + 0.52 * v,
+        (uu, v) => v > 0.7 ? 0.5 : 0.0,
+        () => 0.20 + 0.25 * t,
+        2, FLAG_DOUBLE_SIDED | FLAG_EMISSIVE_TIP, 12, 0.25, partId
+      );
+    }
+  }
+
+  function addPawBudMesh(mesh, pos, dir, len, colors, sway) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const partId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      4, 4,
+      (uu, v) => {
+        const a = uu * Math.PI * 2;
+        const curve = Math.pow(v, 1.7) * len * 0.28;
+        const rad = len * (0.15 + 0.11 * Math.sin(v * Math.PI) - 0.09 * v);
+        const cx = pos[0] + basis.f[0] * (v * len) + basis.u[0] * curve;
+        const cy = pos[1] + basis.f[1] * (v * len) + basis.u[1] * curve;
+        const cz = pos[2] + basis.f[2] * (v * len) + basis.u[2] * curve;
+        const nx = basis.r[0] * Math.cos(a) + basis.u[0] * Math.sin(a);
+        const ny = basis.r[1] * Math.cos(a) + basis.u[1] * Math.sin(a);
+        const nz = basis.r[2] * Math.cos(a) + basis.u[2] * Math.sin(a);
+        return [cx + nx * rad, cy + ny * rad, cz + nz * rad];
+      },
+      (uu, v) => v < 0.5
+        ? lerp3(colors.inner, colors.mid, v * 2)
+        : lerp3(colors.mid, colors.edge, (v - 0.5) * 2),
+      (uu, v) => 0.65 + 0.35 * v,
+      (uu, v) => v > 0.7 ? 0.5 : 0.0,
+      () => sway,
+      6, FLAG_EMISSIVE_TIP, 10, 0.20, partId
+    );
+  }
+
+  function addKangarooPawBranch(mesh, stems, start, mainDir, length, colors) {
+    const basis = buildBasis(mainDir[0], mainDir[1], mainDir[2]);
+    const stalkDark = [110, 42, 20];
+    const stalkTip = colors.mid;
+    const endPt = [
+      start[0] + basis.f[0] * length,
+      start[1] + basis.f[1] * length + 0.12,
+      start[2] + basis.f[2] * length
+    ];
+    const ctrl1 = [start[0] + basis.f[0] * length * 0.35, start[1] + basis.f[1] * length * 0.35 + 0.08, start[2] + basis.f[2] * length * 0.35];
+    const ctrl2 = [start[0] + basis.f[0] * length * 0.72 + basis.u[0] * 0.10, start[1] + basis.f[1] * length * 0.72 + 0.14, start[2] + basis.f[2] * length * 0.72 + basis.u[2] * 0.10];
+    stems.addBezier(start, ctrl1, ctrl2, endPt, 7, stalkDark, stalkTip, 2, 0.12, 0.44, mesh.nextPartId());
+
+    addPawBudMesh(mesh, endPt, mainDir, 0.14, colors, 0.46);
+    const forkTs = [0.46, 0.66, 0.82];
+    for (let b = 0; b < 3; b++) {
+      const anchor = evalBezier(start, ctrl1, ctrl2, endPt, forkTs[b]);
+      const sideSign = b % 2 === 0 ? 1 : -1;
+      const subDir = normalize3(
+        basis.f[0] * 0.68 + basis.r[0] * sideSign * 0.58 + basis.u[0] * 0.24,
+        basis.f[1] * 0.68 + basis.r[1] * sideSign * 0.58 + basis.u[1] * 0.24 + 0.18,
+        basis.f[2] * 0.68 + basis.r[2] * sideSign * 0.58 + basis.u[2] * 0.24
+      );
+      const subLen = length * (0.34 - b * 0.04);
+      const subEnd = [anchor[0] + subDir[0] * subLen, anchor[1] + subDir[1] * subLen + 0.05, anchor[2] + subDir[2] * subLen];
+      stems.addSegment(anchor, subEnd, stalkTip, colors.edge, 1, 0.26 + b * 0.06, 0.48, mesh.nextPartId(), 0);
+      addPawBudMesh(mesh, subEnd, subDir, 0.125, colors, 0.48);
+    }
+  }
+
+  function addHypericumSprig(mesh, stems, pos, dir, berryCol, leafCol, rng) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const goldenAngle = 2.399963229728653;
+    const berryCount = 6;
+    const twigStart = [pos[0] - basis.f[0] * 0.14, pos[1] - basis.f[1] * 0.14, pos[2] - basis.f[2] * 0.14];
+
+    for (let b = 0; b < berryCount; b++) {
+      const t = b / berryCount;
+      const ang = b * goldenAngle;
+      const spread = 0.05 + 0.11 * Math.sqrt(t);
+      const bx = pos[0] + (basis.r[0] * Math.cos(ang) + basis.u[0] * Math.sin(ang)) * spread + basis.f[0] * (0.04 * (1 - t));
+      const by = pos[1] + (basis.r[1] * Math.cos(ang) + basis.u[1] * Math.sin(ang)) * spread + basis.f[1] * (0.04 * (1 - t));
+      const bz = pos[2] + (basis.r[2] * Math.cos(ang) + basis.u[2] * Math.sin(ang)) * spread + basis.f[2] * (0.04 * (1 - t));
+      const rBerry = 0.056 + 0.010 * rng();
+
+      stems.addSegment(twigStart, [bx, by, bz], leafCol.base, leafCol.tip, 1, 0.12, 0.18, mesh.nextPartId(), 0);
+      const bPart = mesh.nextPartId();
+      mesh.addParametricPatch(
+        5, 4,
+        (uu, v) => {
+          const theta = uu * Math.PI * 2;
+          const phi = v * Math.PI;
+          const sp = Math.sin(phi);
+          return [
+            bx + sp * Math.cos(theta) * rBerry,
+            by + Math.cos(phi) * rBerry,
+            bz + sp * Math.sin(theta) * rBerry
+          ];
+        },
+        (uu, v) => v > 0.85 ? leafCol.base : lerp3(berryCol.edge, berryCol.inner, v),
+        (uu, v) => 0.72 + 0.28 * (1 - v),
+        (uu, v) => v < 0.35 ? 0.35 : 0.0,
+        () => 0.18,
+        4, 0, 32, 0.96, bPart
+      );
+    }
+  }
+
+  function addLeaf(mesh, pos, dir, length, width, leafCol, isEucalyptus = false) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const colBase = isEucalyptus ? [88, 138, 106] : leafCol.base;
+    const colTip = isEucalyptus ? [148, 196, 162] : leafCol.tip;
+    const partId = mesh.nextPartId();
+
+    mesh.addParametricPatch(
+      3, 5,
+      (uu, v) => {
+        const u = uu * 2 - 1;
+        const shape = isEucalyptus
+          ? Math.sin(Math.pow(v, 0.70) * Math.PI)
+          : Math.sin(Math.pow(v, 0.56) * Math.PI);
+        const w = u * width * 0.5 * shape;
+        const arch = -0.20 * length * Math.pow(v, 1.8) + Math.abs(u) * 0.045 * width;
+        const fwd = v * length;
+        return [
+          pos[0] + basis.r[0] * w + basis.u[0] * arch + basis.f[0] * fwd,
+          pos[1] + basis.r[1] * w + basis.u[1] * arch + basis.f[1] * fwd,
+          pos[2] + basis.r[2] * w + basis.u[2] * arch + basis.f[2] * fwd
+        ];
+      },
+      (uu, v) => {
+        const u = uu * 2 - 1;
+        let c = lerp3(colBase, colTip, clamp(v * 0.85 + 0.15, 0, 1));
+        if (Math.abs(u) < 0.16) c = lerp3(c, colTip, 0.28);
+        return c;
+      },
+      (uu, v) => 0.48 + 0.52 * Math.pow(v, 0.5),
+      (uu, v) => (Math.abs(uu - 0.5) > 0.36 || v > 0.80) ? 0.35 : 0.0,
+      (uu, v) => 0.12 + 0.24 * v,
+      3, FLAG_DOUBLE_SIDED, isEucalyptus ? 6 : 20, isEucalyptus ? 0.14 : 0.42, partId
+    );
+  }
+
+  function addEucalyptusSprig(mesh, stems, start, dir, length, leafCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const end = [start[0] + basis.f[0] * length, start[1] + basis.f[1] * length + 0.08, start[2] + basis.f[2] * length];
+    const c1 = [start[0] + basis.f[0] * length * 0.35, start[1] + basis.f[1] * length * 0.35 + 0.06, start[2] + basis.f[2] * length * 0.35];
+    const c2 = [start[0] + basis.f[0] * length * 0.72, start[1] + basis.f[1] * length * 0.72 + 0.10, start[2] + basis.f[2] * length * 0.72];
+    stems.addBezier(start, c1, c2, end, 6, [76, 118, 88], [118, 164, 132], 1, 0.12, 0.38, mesh.nextPartId());
+
+    for (let i = 0; i < 4; i++) {
+      const t = 0.25 + i * 0.22;
+      const pt = evalBezier(start, c1, c2, end, t);
+      const scale = 1 - i * 0.14;
+      for (const side of [-1, 1]) {
+        const lDir = normalize3(
+          basis.r[0] * side * 0.72 + basis.f[0] * 0.46 + basis.u[0] * 0.22,
+          basis.r[1] * side * 0.72 + basis.f[1] * 0.46 + basis.u[1] * 0.22 + 0.12,
+          basis.r[2] * side * 0.72 + basis.f[2] * 0.46 + basis.u[2] * 0.22
+        );
+        addLeaf(mesh, pt, lDir, 0.21 * scale, 0.15 * scale, leafCol, true);
+      }
+    }
+  }
+
+  function addFernFrond(mesh, stems, start, dir, length, leafCol) {
+    const basis = buildBasis(dir[0], dir[1], dir[2]);
+    const end = [start[0] + basis.f[0] * length, start[1] + basis.f[1] * length - 0.14, start[2] + basis.f[2] * length];
+    const c1 = [start[0] + basis.f[0] * length * 0.35, start[1] + basis.f[1] * length * 0.35 + 0.14, start[2] + basis.f[2] * length * 0.35];
+    const c2 = [start[0] + basis.f[0] * length * 0.72, start[1] + basis.f[1] * length * 0.72 + 0.04, start[2] + basis.f[2] * length * 0.72];
+    stems.addBezier(start, c1, ctrl2Vec(c2), end, 8, leafCol.base, leafCol.tip, 1, 0.14, 0.42, mesh.nextPartId());
+
+    for (let i = 0; i < 9; i++) {
+      const t = 0.20 + i * 0.092;
+      const pt = evalBezier(start, c1, c2, end, t);
+      const pinnaLen = (1 - Math.abs(t - 0.48) * 1.4) * 0.17;
+      if (pinnaLen <= 0.03) continue;
+      for (const side of [-1, 1]) {
+        const lDir = normalize3(
+          basis.r[0] * side * 0.85 + basis.f[0] * 0.42,
+          basis.r[1] * side * 0.85 + basis.f[1] * 0.42 + 0.1,
+          basis.r[2] * side * 0.85 + basis.f[2] * 0.42
+        );
+        addLeaf(mesh, pt, lDir, pinnaLen, 0.055, leafCol, false);
+      }
+    }
+  }
+
+  function ctrl2Vec(v) {
+    return [v[0], v[1], v[2]];
+  }
+
+  function addRibbonBow(mesh, waistY, waistRadius, ribTheme) {
+    const { dark: ribDark, mid: ribMid, lit: ribLit } = ribTheme;
+
+    const bandId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      22, 3,
+      (u, v) => {
+        const theta = u * Math.PI * 2;
+        const y = lerp(waistY - 0.08, waistY + 0.08, v);
+        const r = waistRadius + 0.012 * Math.sin(v * Math.PI);
+        return [r * Math.sin(theta), y, r * Math.cos(theta)];
+      },
+      (u, v) => lerp3(ribMid, ribLit, Math.sin(v * Math.PI) * 0.7),
+      (u, v) => 0.72 + 0.28 * Math.sin(v * Math.PI),
+      () => 0.25,
+      () => 0.05,
+      5, FLAG_DOUBLE_SIDED, 26, 0.80, bandId
+    );
+
+    const knotPos = [-0.04, waistY, waistRadius + 0.025];
+    const knotId = mesh.nextPartId();
+    mesh.addParametricPatch(
+      7, 4,
+      (u, v) => {
+        const a = u * Math.PI * 2;
+        const b = (v - 0.5) * Math.PI;
+        return [
+          knotPos[0] + Math.cos(b) * Math.cos(a) * 0.052,
+          knotPos[1] + Math.sin(b) * 0.042,
+          knotPos[2] + Math.cos(b) * Math.sin(a) * 0.042
+        ];
+      },
+      () => ribLit,
+      () => 0.92,
+      () => 0.4,
+      () => 0.06,
+      5, 0, 28, 0.85, knotId
+    );
+
+    for (const side of [-1, 1]) {
+      const loopId = mesh.nextPartId();
+      mesh.addParametricPatch(
+        9, 4,
+        (u, v) => {
+          const t = u * Math.PI * 2;
+          const w = (v - 0.5) * 0.075;
+          const lx = side * (0.04 + 0.16 * Math.sin(t * 0.5));
+          const ly = 0.065 * Math.sin(t) + w * 0.65;
+          const lz = 0.055 * Math.sin(t * 0.5) + w * 0.35;
+          return [knotPos[0] + lx, knotPos[1] + ly, knotPos[2] + lz];
+        },
+        (u, v) => lerp3(ribDark, ribLit, 0.35 + 0.65 * Math.sin(v * Math.PI)),
+        () => 0.88,
+        () => 0.35,
+        () => 0.12,
+        5, FLAG_DOUBLE_SIDED, 26, 0.82, loopId
+      );
+    }
+
+    const tails = [
+      { xOff: -0.05, driftX: -0.24, driftZ: 0.20, phase: 0.5 },
+      { xOff: 0.04, driftX: 0.18, driftZ: 0.24, phase: 1.8 }
+    ];
+    for (const ts of tails) {
+      const tailId = mesh.nextPartId();
+      mesh.addParametricPatch(
+        3, 14,
+        (u, v) => {
+          const w = (u - 0.5) * 0.065;
+          const y = lerp(waistY - 0.02, -1.68, v);
+          const x = knotPos[0] + ts.xOff + ts.driftX * Math.pow(v, 0.85) + 0.03 * Math.sin(v * 5.0 + ts.phase) + w;
+          const z = knotPos[2] + ts.driftZ * Math.pow(v, 0.72) + 0.025 * Math.cos(v * 4.2 + ts.phase);
+          return [x, y, z];
+        },
+        (u, v) => lerp3(ribMid, ribLit, 0.38 + 0.55 * Math.sin(v * Math.PI * 2 + ts.phase)),
+        (u, v) => 0.68 + 0.32 * v,
+        (u, v) => v > 0.88 ? 0.45 : 0.15,
+        (u, v) => 0.08 + 0.44 * v,
+        5, FLAG_DOUBLE_SIDED, 26, 0.82, tailId
+      );
+    }
+  }
+
+  function addContourVeil(mesh, stems, waistY, ribTheme) {
+    const colRim = lerp3(ribTheme.lit, [255, 232, 238], 0.62);
+    const colDim = lerp3(ribTheme.dark, [156, 128, 142], 0.55);
+
+    const ribCount = 8;
+    for (let i = 0; i < ribCount; i++) {
+      const a = (i / ribCount) * Math.PI * 2 + 0.2;
+      const pTop = [Math.sin(a) * 0.23, waistY, Math.cos(a) * 0.23];
+      const pBot = [Math.sin(a) * 0.68, -1.76, Math.cos(a) * 0.68];
+      stems.addSegment(pTop, pBot, colRim, colDim, 1, 0.04, 0.14, mesh.nextPartId(), 0, 58);
+    }
+
+    const arcs = [
+      { t0: -2.55, t1: -0.95, yPeak: 1.48, rTop: 1.48 },
+      { t0: 0.95,  t1: 2.55,  yPeak: 1.42, rTop: 1.46 },
+      { t0: 2.35,  t1: 3.92,  yPeak: 1.72, rTop: 1.24 },
+      { t0: -1.05, t1: 1.05,  yPeak: -0.26, rTop: 1.08 }
+    ];
+    for (const arc of arcs) {
+      const partId = mesh.nextPartId();
+      const segs = 14;
+      let prev = null;
+      for (let i = 0; i <= segs; i++) {
+        const u = i / segs;
+        const th = lerp(arc.t0, arc.t1, u);
+        const peak = 1 - Math.pow(Math.abs(u - 0.5) * 2, 1.45);
+        const y = lerp(arc.yPeak - 0.55, arc.yPeak, peak);
+        const r = arc.rTop * (0.86 + 0.14 * peak);
+        const pt = [r * Math.sin(th), y, r * Math.cos(th)];
+        if (prev) {
+          stems.addSegment(prev, pt, colRim, colRim, 1, 0.16, 0.16, partId, 0, 46);
+        }
+        prev = pt;
+      }
+
+      const pL = [arc.rTop * 0.86 * Math.sin(arc.t0), arc.yPeak - 0.55, arc.rTop * 0.86 * Math.cos(arc.t0)];
+      const pR = [arc.rTop * 0.86 * Math.sin(arc.t1), arc.yPeak - 0.55, arc.rTop * 0.86 * Math.cos(arc.t1)];
+      const wL = [0.22 * Math.sin(arc.t0), waistY, 0.22 * Math.cos(arc.t0)];
+      const wR = [0.22 * Math.sin(arc.t1), waistY, 0.22 * Math.cos(arc.t1)];
+      stems.addSegment(wL, pL, colDim, colRim, 1, 0.05, 0.14, partId, 0, 58);
+      stems.addSegment(wR, pR, colDim, colRim, 1, 0.05, 0.14, partId, 0, 58);
+    }
+  }
+
+  function layoutBlooms(cfg, rng) {
+    const count = cfg.bloomCount;
+    const activeIds = cfg.species.length > 0 ? cfg.species : ['rose'];
+    const metaMap = Object.create(null);
+    for (const s of SPECIES_LIST) metaMap[s.id] = s;
+
+    const chosen = [];
+    for (let i = 0; i < count; i++) {
+      chosen.push(activeIds[i % activeIds.length]);
+    }
+    for (let i = chosen.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const tmp = chosen[i];
+      chosen[i] = chosen[j];
+      chosen[j] = tmp;
+    }
+
+    const sizeScale = clamp(Math.sqrt(13 / count), 0.76, 1.24);
+    const goldenAngle = 2.399963229728653;
+    const blooms = [];
+
+    for (let i = 0; i < count; i++) {
+      const spId = chosen[i];
+      const meta = metaMap[spId] || metaMap.rose;
+      const t = count > 1 ? i / (count - 1) : 0.5;
+      const az = i * goldenAngle + (rng() - 0.5) * 0.32;
+
+      let yMin = 0.18, yMax = 1.38, rMin = 0.28, rMax = 1.02;
+      if (cfg.shape === 'airy') {
+        yMin = 0.10; yMax = 1.56; rMin = 0.34; rMax = 1.15;
+      } else if (cfg.shape === 'round') {
+        yMin = 0.24; yMax = 1.24; rMin = 0.26; rMax = 0.86;
+      } else if (cfg.shape === 'asymmetric') {
+        yMin = 0.06; yMax = 1.52; rMin = 0.32; rMax = 1.08;
+      }
+
+      let tierT = t;
+      if (meta.tier === 'hero') tierT = t * 0.72;
+      else if (meta.tier === 'accent') tierT = 0.35 + t * 0.65;
+
+      let y = lerp(yMax, yMin, Math.pow(tierT, 0.78)) + (rng() - 0.5) * 0.18;
+      if (cfg.shape === 'asymmetric') {
+        y += Math.sin(az) * 0.28;
+      }
+      const horizR = lerp(rMin, rMax, Math.sqrt(tierT)) * (0.88 + 0.24 * rng());
+      const x = Math.cos(az) * horizR;
+      const z = Math.sin(az) * horizR;
+      const rad = meta.baseR * sizeScale * (0.90 + 0.18 * rng());
+
+      blooms.push({ spId, x, y, z, r: rad, variantIdx: i });
+    }
+
+    for (let iter = 0; iter < 18; iter++) {
+      for (let i = 0; i < count; i++) {
+        for (let j = i + 1; j < count; j++) {
+          const a = blooms[i];
+          const b = blooms[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dz = a.z - b.z;
+          const dist = Math.hypot(dx, dy, dz) || 0.001;
+          const minDist = (a.r + b.r) * 0.88 + 0.09;
+          if (dist < minDist) {
+            const push = ((minDist - dist) / dist) * 0.36;
+            a.x += dx * push; a.y += dy * push; a.z += dz * push;
+            b.x -= dx * push; b.y -= dy * push; b.z -= dz * push;
+          }
+        }
+      }
+
+      const maxSpan = cfg.shape === 'airy' ? 1.24 : cfg.shape === 'round' ? 0.98 : 1.14;
+      for (let i = 0; i < count; i++) {
+        const b = blooms[i];
+        const hr = Math.hypot(b.x, b.z);
+        if (hr > maxSpan) {
+          const s = maxSpan / hr;
+          b.x *= s;
+          b.z *= s;
+        }
+        b.y = clamp(b.y, 0.04, cfg.shape === 'round' ? 1.32 : 1.54);
+      }
+    }
+
+    return blooms;
+  }
+
+  function generateBouquet(cfg) {
+    const rng = mulberry32(cfg.seed);
+    const pal = PALETTES[cfg.palette] || PALETTES.autumn;
+    const mesh = new MeshBuilder();
+    const stems = new StemList();
+    const waistY = -0.82;
+
+    const stemTopCol = pal.leaf.tip;
+    const stemWaistCol = pal.leaf.base;
+    const stemCutCol = lerp3(pal.leaf.base, pal.leaf.tip, 0.45);
+    const dense = cfg.bloomCount > 16;
+
+    function connectStem(pos, dir, thick = 2, backOff = 0.04) {
+      const f = normalize3(dir[0], dir[1], dir[2]);
+      const p0 = [pos[0] - f[0] * backOff, pos[1] - f[1] * backOff, pos[2] - f[2] * backOff];
+
+      const radialLen = Math.hypot(p0[0], p0[2]) || 1;
+      const wRad = Math.min(0.11, radialLen * 0.12);
+      const wPt = [(p0[0] / radialLen) * wRad, waistY, (p0[2] / radialLen) * wRad];
+
+      const cutY = -1.70 - rng() * 0.10;
+      const pEnd = [-p0[0] * 0.24 + (rng() - 0.5) * 0.06, cutY, -p0[2] * 0.24 + (rng() - 0.5) * 0.06];
+      const tWaist = normalize3(pEnd[0] - p0[0] * 0.35, -1.0, pEnd[2] - p0[2] * 0.35);
+
+      const c1 = [p0[0] - f[0] * 0.26, p0[1] - f[1] * 0.26 - 0.16, p0[2] - f[2] * 0.26];
+      const c2 = [wPt[0] - tWaist[0] * 0.36, wPt[1] - tWaist[1] * 0.36, wPt[2] - tWaist[2] * 0.36];
+      stems.addBezier(p0, c1, c2, wPt, 8, stemTopCol, stemWaistCol, thick, 0.14, 0.05, mesh.nextPartId());
+
+      const c1b = [wPt[0] + tWaist[0] * 0.26, wPt[1] + tWaist[1] * 0.26, wPt[2] + tWaist[2] * 0.26];
+      const c2b = [pEnd[0] - tWaist[0] * 0.22, pEnd[1] - tWaist[1] * 0.22, pEnd[2] - tWaist[2] * 0.22];
+      stems.addBezier(wPt, c1b, c2b, pEnd, 5, stemWaistCol, stemCutCol, thick, 0.05, 0.14, mesh.nextPartId());
+    }
+
+    const blooms = layoutBlooms(cfg, rng);
+    const colCycle = [pal.primary, pal.secondary, pal.accent];
+
+    for (let i = 0; i < blooms.length; i++) {
+      const b = blooms[i];
+      const pos = [b.x, b.y, b.z];
+      const dir = normalize3(b.x, (b.y + 0.30) * 0.62 + 0.16, b.z);
+      const colSet = colCycle[b.variantIdx % colCycle.length];
+
+      switch (b.spId) {
+        case 'rose':
+          addRose(mesh, pos, dir, b.r, colSet, pal.leaf, rng, dense);
+          connectStem(pos, dir, 2, b.r * 0.08);
+          break;
+        case 'rosebud':
+          addRoseBud(mesh, pos, dir, b.r, colSet, pal.leaf);
+          connectStem(pos, dir, 1, 0.02);
+          break;
+        case 'tulip':
+          addTulip(mesh, pos, dir, b.r, colSet, pal.center);
+          connectStem(pos, dir, 2, 0.02);
+          break;
+        case 'orchid':
+          addCymbidiumOrchid(mesh, pos, dir, b.r, colSet, pal.center, pal.leaf);
+          connectStem(pos, dir, 2, 0.04);
+          break;
+        case 'calla':
+          addCallaLily(mesh, pos, dir, b.r, colSet, pal.center);
+          connectStem(pos, dir, 2, 0.01);
+          break;
+        case 'daisy':
+          addDaisy(mesh, pos, dir, b.r, colSet, pal.center);
+          connectStem(pos, dir, 1, 0.03);
+          break;
+        case 'sunflower':
+          addSunflower(mesh, pos, dir, b.r, colSet, pal.leaf);
+          connectStem(pos, dir, 2, 0.04);
+          break;
+        case 'peony':
+          addPeony(mesh, pos, dir, b.r, colSet, pal.center, pal.leaf, rng, dense);
+          connectStem(pos, dir, 2, b.r * 0.06);
+          break;
+        case 'lily':
+          addLily(mesh, stems, pos, dir, b.r, colSet, pal.center);
+          connectStem(pos, dir, 2, 0.03);
+          break;
+        case 'protea':
+          addPincushionProtea(mesh, stems, pos, dir, b.r, colSet, rng);
+          connectStem(pos, dir, 2, b.r * 0.08);
+          break;
+        case 'spike': {
+          const baseSpike = [b.x * 0.72, Math.max(0.05, b.y - 0.28), b.z * 0.72];
+          addFlowerSpike(mesh, stems, baseSpike, dir, b.r, colSet, pal.leaf);
+          connectStem(baseSpike, dir, 1, 0.0);
+          break;
+        }
+        case 'accents':
+          if (i % 2 === 0) {
+            const kpStart = [b.x * 0.72, Math.max(0.0, b.y - 0.16), b.z * 0.72];
+            addKangarooPawBranch(mesh, stems, kpStart, dir, 0.78, pal.accent);
+            connectStem(kpStart, dir, 1, 0.0);
+          } else {
+            addHypericumSprig(mesh, stems, pos, dir, pal.secondary, pal.leaf, rng);
+            connectStem(pos, dir, 1, 0.06);
+          }
+          break;
+      }
+    }
+
+    const greenFactor = cfg.greenery / 100;
+    const leafCount = Math.round(20 * greenFactor);
+    for (let i = 0; i < leafCount; i++) {
+      const a = (i / Math.max(1, leafCount)) * Math.PI * 2 + 0.22 * (i % 2);
+      const tier = i % 3;
+      const y = tier === 0 ? -0.18 : tier === 1 ? 0.16 : 0.46;
+      const r = tier === 0 ? 0.52 : tier === 1 ? 0.62 : 0.50;
+      const lx = r * Math.cos(a);
+      const lz = r * Math.sin(a);
+      const dir = normalize3(Math.cos(a) * 0.90, 0.22 + tier * 0.16, Math.sin(a) * 0.90);
+      addLeaf(mesh, [lx, y, lz], dir, 0.36 + 0.08 * (i % 2), 0.18, pal.leaf, false);
+      if (i % 2 === 0) {
+        connectStem([lx, y, lz], dir, 1, 0.02);
+      }
+    }
+
+    const sprigCount = Math.round(4 * greenFactor);
+    for (let i = 0; i < sprigCount; i++) {
+      const a = (i / Math.max(1, sprigCount)) * Math.PI * 2 + 0.45;
+      const sx = 0.44 * Math.cos(a);
+      const sz = 0.44 * Math.sin(a);
+      const sy = 0.22 + (i % 2) * 0.28;
+      const dir = normalize3(Math.cos(a) * 0.78, 0.52, Math.sin(a) * 0.78);
+      if (cfg.shape === 'airy' && i % 2 === 1) {
+        addFernFrond(mesh, stems, [sx, sy, sz], dir, 0.66, pal.leaf);
+      } else {
+        addEucalyptusSprig(mesh, stems, [sx, sy, sz], dir, 0.60, pal.leaf);
+      }
+      connectStem([sx, sy, sz], dir, 1, 0.0);
+    }
+
+    const ribKey = cfg.ribbon === 'auto' ? pal.ribbon : cfg.ribbon;
+    const ribTheme = RIBBON_THEMES[ribKey] || RIBBON_THEMES.terracotta;
+    if (cfg.ribbon !== 'none') {
+      addRibbonBow(mesh, waistY, 0.165, ribTheme);
+    }
+    if (cfg.wrap === 'veil') {
+      addContourVeil(mesh, stems, waistY, ribTheme);
+    }
+
+    const particles = [];
+    const glyphs = ['.', '·', '°', 'o', '*', '~', '+'];
+    for (let i = 0; i < 72; i++) {
+      const a = rng() * Math.PI * 2;
+      const r = 1.25 + rng() * 1.45;
+      const y = -1.75 + rng() * 3.55;
+      particles.push({
+        x: r * Math.cos(a),
+        y,
+        z: r * Math.sin(a),
+        glyph: glyphs[i % glyphs.length],
+        col: pal.sparkles[i % pal.sparkles.length],
+        phase: rng() * Math.PI * 2,
+        speed: 0.4 + rng() * 0.9,
+        orbit: (rng() - 0.5) * 0.22
+      });
+    }
+
+    const sparkleAnchors = [
+      [-1.66, 1.42, 0.35], [1.62, 1.38, -0.25], [-1.76, 0.16, -0.45], [1.74, -0.14, 0.40],
+      [-1.26, -1.36, 0.55], [1.22, -1.30, -0.45], [0.88, 1.68, 0.48], [-0.94, 1.64, -0.42]
+    ];
+    const sparkles = sparkleAnchors.map((pt, idx) => ({
+      x: pt[0], y: pt[1], z: pt[2],
+      col: pal.sparkles[idx % pal.sparkles.length],
+      phase: idx * 0.85
+    }));
+
+    return {
+      mesh: mesh.pack(),
+      stems: stems.segments,
+      ambient: { particles, sparkles },
+      bloomCount: blooms.length
+    };
+  }
+
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const bloomCanvas = document.createElement('canvas');
+  const bloomCtx = bloomCanvas.getContext('2d');
+
+  const colorCache = new Array(32768);
+  function getCachedColor(r, g, b) {
+    const r5 = (clamp(r | 0, 0, 255) >> 3) & 31;
+    const g5 = (clamp(g | 0, 0, 255) >> 3) & 31;
+    const b5 = (clamp(b | 0, 0, 255) >> 3) & 31;
+    const key = (r5 << 10) | (g5 << 5) | b5;
+    let str = colorCache[key];
+    if (!str) {
+      const cr = (r5 << 3) | (r5 >> 2);
+      const cg = (g5 << 3) | (g5 >> 2);
+      const cb = (b5 << 3) | (b5 >> 2);
+      str = 'rgb(' + cr + ',' + cg + ',' + cb + ')';
+      colorCache[key] = str;
+    }
+    return str;
+  }
+
+  const cfg = {
+    seed: 104821,
+    preset: 'autumn',
+    palette: 'autumn',
+    species: ['rose', 'rosebud', 'orchid', 'calla', 'protea', 'accents'],
+    shape: 'dome',
+    bloomCount: 14,
+    greenery: 65,
+    ribbon: 'auto',
+    wrap: 'none',
+    caption: ''
+  };
+
+  const state = {
+    playing: true,
+    speedMul: 1.0,
+    glow: true,
+    edges: true,
+    densityIdx: 0,
+    densityLabels: ['Detailed', 'Ultra', 'Classic'],
+    drawerCollapsed: window.innerWidth < 1020,
+    hudHidden: false,
+    angleY: 0.0,
+    pitch: 0.24,
+    zoom: 1.0,
+    velY: 0.0,
+    velP: 0.0,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    currentCenterX: window.innerWidth ? window.innerWidth * 0.5 : 640
+  };
+
+  let viewW = 1280, viewH = 720, dpr = 1;
+  let cellH = 8, cellW = 5, cols = 200, rows = 108;
+
+  let zBuf = new Float32Array(0);
+  let rBuf = new Uint8Array(0);
+  let gBuf = new Uint8Array(0);
+  let bBuf = new Uint8Array(0);
+  let lumBuf = new Float32Array(0);
+  let rampBuf = new Uint8Array(0);
+  let charBuf = new Uint16Array(0);
+  let partBuf = new Uint16Array(0);
+
+  let tvGx = new Float32Array(0);
+  let tvGy = new Float32Array(0);
+  let tvZ = new Float32Array(0);
+  let tvNx = new Float32Array(0);
+  let tvNy = new Float32Array(0);
+  let tvNz = new Float32Array(0);
+
+  let activeBouquet = null;
+
+  function regenerateBouquet() {
+    activeBouquet = generateBouquet(cfg);
+    const vc = activeBouquet.mesh.vCount;
+    if (vc > tvGx.length) {
+      tvGx = new Float32Array(vc);
+      tvGy = new Float32Array(vc);
+      tvZ = new Float32Array(vc);
+      tvNx = new Float32Array(vc);
+      tvNy = new Float32Array(vc);
+      tvNz = new Float32Array(vc);
+    }
+    updateStatsReadout();
+    saveHashQuiet();
+  }
+
+  function resize() {
+    viewW = window.innerWidth || 1280;
+    viewH = window.innerHeight || 720;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    canvas.width = Math.max(1, Math.floor(viewW * dpr));
+    canvas.height = Math.max(1, Math.floor(viewH * dpr));
+    canvas.style.width = viewW + 'px';
+    canvas.style.height = viewH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (state.densityIdx === 0) {
+      cellH = clamp(Math.floor(viewH / 108), 7, 10);
+    } else if (state.densityIdx === 1) {
+      cellH = clamp(Math.floor(viewH / 142), 5, 8);
+    } else {
+      cellH = clamp(Math.floor(viewH / 76), 9, 13);
+    }
+
+    ctx.font = cellH + 'px "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, "Courier New", monospace';
+    ctx.textBaseline = 'top';
+    cellW = Math.max(3.2, ctx.measureText('M').width * 1.02);
+
+    cols = Math.ceil(viewW / cellW);
+    rows = Math.ceil(viewH / cellH);
+
+    const total = cols * rows;
+    zBuf = new Float32Array(total);
+    rBuf = new Uint8Array(total);
+    gBuf = new Uint8Array(total);
+    bBuf = new Uint8Array(total);
+    lumBuf = new Float32Array(total);
+    rampBuf = new Uint8Array(total);
+    charBuf = new Uint16Array(total);
+    partBuf = new Uint16Array(total);
+
+    bloomCanvas.width = Math.max(1, viewW >> 2);
+    bloomCanvas.height = Math.max(1, viewH >> 2);
+    updateStatsReadout();
+  }
+
+  const L1 = normalize3(-0.42, 0.68, 0.60);
+  const L2 = normalize3(0.62, 0.28, -0.73);
+  const H1 = normalize3(L1[0], L1[1], L1[2] + 1.0);
+
+  function rasterizeTriangles(mesh, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist, t) {
+    const vc = mesh.vCount;
+    const vxArr = mesh.vx, vyArr = mesh.vy, vzArr = mesh.vz;
+    const vnxArr = mesh.vnx, vnyArr = mesh.vny, vnzArr = mesh.vnz;
+    const swayArr = mesh.vsway;
+    const invCellW = 1 / cellW;
+    const invCellH = 1 / cellH;
+
+    for (let i = 0; i < vc; i++) {
+      let x = vxArr[i];
+      const y = vyArr[i];
+      let z = vzArr[i];
+      const sw = swayArr[i];
+      if (sw > 0.01) {
+        const wave = Math.sin(t * 1.85 + x * 1.6 + y * 1.2) * 0.020 * sw;
+        x += wave;
+        z += wave * 0.7;
+      }
+
+      const x1 = x * cosY + z * sinY;
+      const z1 = -x * sinY + z * cosY;
+      const y2 = y * cosP - z1 * sinP;
+      const z2 = y * sinP + z1 * cosP;
+
+      const dz = camDist - z2;
+      if (dz < 0.8) {
+        tvZ[i] = -1e9;
+        continue;
+      }
+
+      const scale = projScale / dz;
+      tvGx[i] = (centerX + x1 * scale) * invCellW;
+      tvGy[i] = (centerY - (y2 + 0.04) * scale) * invCellH;
+      tvZ[i] = z2;
+
+      const nx0 = vnxArr[i], ny0 = vnyArr[i], nz0 = vnzArr[i];
+      const nx1 = nx0 * cosY + nz0 * sinY;
+      const nz1 = -nx0 * sinY + nz0 * cosY;
+      tvNx[i] = nx1;
+      tvNy[i] = ny0 * cosP - nz1 * sinP;
+      tvNz[i] = ny0 * sinP + nz1 * cosP;
+    }
+
+    const tc = mesh.tCount;
+    const ti0Arr = mesh.ti0, ti1Arr = mesh.ti1, ti2Arr = mesh.ti2;
+    const tRampArr = mesh.tRamp, tFlagsArr = mesh.tFlags;
+    const tSpecPowArr = mesh.tSpecPow, tSpecStrArr = mesh.tSpecStr, tPartArr = mesh.tPart;
+    const vcr = mesh.vcr, vcg = mesh.vcg, vcb = mesh.vcb;
+    const vao = mesh.vao, vrim = mesh.vrim;
+
+    const l1x = L1[0], l1y = L1[1], l1z = L1[2];
+    const l2x = L2[0], l2y = L2[1], l2z = L2[2];
+    const h1x = H1[0], h1y = H1[1], h1z = H1[2];
+
+    for (let tr = 0; tr < tc; tr++) {
+      const i0 = ti0Arr[tr];
+      const i1 = ti1Arr[tr];
+      const i2 = ti2Arr[tr];
+
+      const z0 = tvZ[i0], z1 = tvZ[i1], z2 = tvZ[i2];
+      if (z0 < -1e8 || z1 < -1e8 || z2 < -1e8) continue;
+
+      const x0 = tvGx[i0], y0 = tvGy[i0];
+      const x1 = tvGx[i1], y1 = tvGy[i1];
+      const x2 = tvGx[i2], y2 = tvGy[i2];
+
+      const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+      if (Math.abs(area) < 1e-4) continue;
+      const invArea = 1 / area;
+
+      let minC = Math.floor(Math.min(x0, x1, x2));
+      let maxC = Math.ceil(Math.max(x0, x1, x2));
+      let minR = Math.floor(Math.min(y0, y1, y2));
+      let maxR = Math.ceil(Math.max(y0, y1, y2));
+
+      if (maxC < 0 || minC >= cols || maxR < 0 || minR >= rows) continue;
+      if (minC < 0) minC = 0;
+      if (maxC >= cols) maxC = cols - 1;
+      if (minR < 0) minR = 0;
+      if (maxR >= rows) maxR = rows - 1;
+
+      const ramp = tRampArr[tr];
+      const fl = tFlagsArr[tr];
+      const doubleSided = (fl & FLAG_DOUBLE_SIDED) !== 0;
+      const emissiveTip = (fl & FLAG_EMISSIVE_TIP) !== 0;
+      const sPow = tSpecPowArr[tr];
+      const sStr = tSpecStrArr[tr] / 255;
+      const partId = tPartArr[tr];
+
+      for (let row = minR; row <= maxR; row++) {
+        const py = row + 0.5;
+        const rowOff = row * cols;
+        for (let col = minC; col <= maxC; col++) {
+          const px = col + 0.5;
+          const w0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) * invArea;
+          const w1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) * invArea;
+          const w2 = ((x0 - px) * (y1 - py) - (x1 - px) * (y0 - py)) * invArea;
+          if (w0 < -0.025 || w1 < -0.025 || w2 < -0.025) continue;
+
+          const cw0 = w0 < 0 ? 0 : w0;
+          const cw1 = w1 < 0 ? 0 : w1;
+          const cw2 = w2 < 0 ? 0 : w2;
+          const wSum = cw0 + cw1 + cw2 || 1;
+          const a0 = cw0 / wSum;
+          const a1 = cw1 / wSum;
+          const a2 = cw2 / wSum;
+
+          const z = a0 * z0 + a1 * z1 + a2 * z2;
+          const cell = rowOff + col;
+          if (z <= zBuf[cell]) continue;
+
+          zBuf[cell] = z;
+          partBuf[cell] = partId;
+          rampBuf[cell] = ramp;
+
+          let nx = a0 * tvNx[i0] + a1 * tvNx[i1] + a2 * tvNx[i2];
+          let ny = a0 * tvNy[i0] + a1 * tvNy[i1] + a2 * tvNy[i2];
+          let nz = a0 * tvNz[i0] + a1 * tvNz[i1] + a2 * tvNz[i2];
+          const nLen = Math.hypot(nx, ny, nz) || 1;
+          nx /= nLen; ny /= nLen; nz /= nLen;
+
+          if (doubleSided && nz < 0) {
+            nx = -nx; ny = -ny; nz = -nz;
+          }
+
+          const d1 = nx * l1x + ny * l1y + nz * l1z;
+          const d2 = nx * l2x + ny * l2y + nz * l2z;
+          const diff1 = d1 > 0 ? d1 * 0.72 : 0;
+          const diff2 = d2 > 0 ? d2 * 0.24 : 0;
+          const fres = nz > 0 ? Math.pow(1 - nz, 2.1) * 0.32 : 0.32;
+
+          const ndh = nx * h1x + ny * h1y + nz * h1z;
+          const spec = ndh > 0 ? Math.pow(ndh, sPow) * sStr : 0;
+
+          const ao = a0 * vao[i0] + a1 * vao[i1] + a2 * vao[i2];
+          const rim = a0 * vrim[i0] + a1 * vrim[i1] + a2 * vrim[i2];
+          const floor = emissiveTip ? 0.34 : 0.24;
+          const depthFade = clamp(0.84 + z * 0.12, 0.70, 1.08);
+          const lum = clamp((floor + diff1 + diff2 + fres + spec * 0.55 + rim * 0.14) * (0.28 + 0.72 * ao) * depthFade, 0.08, 1.0);
+
+          const cr = a0 * vcr[i0] + a1 * vcr[i1] + a2 * vcr[i2];
+          const cg = a0 * vcg[i0] + a1 * vcg[i1] + a2 * vcg[i2];
+          const cb = a0 * vcb[i0] + a1 * vcb[i1] + a2 * vcb[i2];
+
+          const brightScale = 0.42 + 0.66 * Math.pow(lum, 0.85);
+          const hiBlend = spec > 0.16 ? Math.min(0.60, spec * 0.85) : 0;
+
+          rBuf[cell] = clamp(Math.round(cr * brightScale * (1 - hiBlend) + 255 * hiBlend), 0, 255);
+          gBuf[cell] = clamp(Math.round(cg * brightScale * (1 - hiBlend) + 244 * hiBlend), 0, 255);
+          bBuf[cell] = clamp(Math.round(cb * brightScale * (1 - hiBlend) + 226 * hiBlend), 0, 255);
+          lumBuf[cell] = lum;
+        }
+      }
+    }
+  }
+
+  function drawStemLines(stemSegs, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist, t) {
+    const invCellW = 1 / cellW;
+    const invCellH = 1 / cellH;
+
+    for (let s = 0; s < stemSegs.length; s++) {
+      const seg = stemSegs[s];
+      let x0 = seg.x0, y0 = seg.y0, z0 = seg.z0;
+      let x1 = seg.x1, y1 = seg.y1, z1 = seg.z1;
+
+      if (seg.sway0 > 0.01) {
+        const w0 = Math.sin(t * 1.85 + x0 * 1.6 + y0 * 1.2) * 0.020 * seg.sway0;
+        x0 += w0; z0 += w0 * 0.7;
+      }
+      if (seg.sway1 > 0.01) {
+        const w1 = Math.sin(t * 1.85 + x1 * 1.6 + y1 * 1.2) * 0.020 * seg.sway1;
+        x1 += w1; z1 += w1 * 0.7;
+      }
+
+      const rx0 = x0 * cosY + z0 * sinY;
+      const rz0 = -x0 * sinY + z0 * cosY;
+      const py0 = y0 * cosP - rz0 * sinP;
+      const pz0 = y0 * sinP + rz0 * cosP;
+
+      const rx1 = x1 * cosY + z1 * sinY;
+      const rz1 = -x1 * sinY + z1 * cosY;
+      const py1 = y1 * cosP - rz1 * sinP;
+      const pz1 = y1 * sinP + rz1 * cosP;
+
+      const dz0 = camDist - pz0;
+      const dz1 = camDist - pz1;
+      if (dz0 < 0.8 || dz1 < 0.8) continue;
+
+      const sc0 = projScale / dz0;
+      const sc1 = projScale / dz1;
+      const gx0 = (centerX + rx0 * sc0) * invCellW;
+      const gy0 = (centerY - (py0 + 0.04) * sc0) * invCellH;
+      const gx1 = (centerX + rx1 * sc1) * invCellW;
+      const gy1 = (centerY - (py1 + 0.04) * sc1) * invCellH;
+
+      let slopeCode;
+      if (seg.bodyGlyph) {
+        slopeCode = seg.bodyGlyph;
+      } else {
+        const dxPx = (gx1 - gx0) * cellW;
+        const dyPx = (gy1 - gy0) * cellH;
+        const ang = Math.atan2(dyPx, dxPx);
+        const absSin = Math.abs(Math.sin(ang));
+        if (absSin > 0.84) slopeCode = 124;
+        else if (absSin < 0.34) slopeCode = 45;
+        else slopeCode = (dxPx * dyPx) < 0 ? 47 : 92;
+      }
+
+      const steps = Math.max(2, Math.ceil(Math.hypot(gx1 - gx0, gy1 - gy0) * 1.8));
+      const thick = seg.thick;
+
+      for (let k = 0; k <= steps; k++) {
+        const f = k / steps;
+        const cx = (lerp(gx0, gx1, f)) | 0;
+        const cy = (lerp(gy0, gy1, f)) | 0;
+        const z = lerp(pz0, pz1, f);
+        const depthFade = clamp(0.84 + z * 0.12, 0.65, 1.05);
+
+        const r = clamp(Math.round(lerp(seg.r0, seg.r1, f) * depthFade), 0, 255);
+        const g = clamp(Math.round(lerp(seg.g0, seg.g1, f) * depthFade), 0, 255);
+        const b = clamp(Math.round(lerp(seg.b0, seg.b1, f) * depthFade), 0, 255);
+        const code = (seg.tipGlyph && k >= steps - 1) ? seg.tipGlyph : slopeCode;
+
+        for (let ox = 0; ox < thick; ox++) {
+          const px = cx + ox;
+          if (px < 0 || px >= cols || cy < 0 || cy >= rows) continue;
+          const cell = cy * cols + px;
+          if (z > zBuf[cell]) {
+            zBuf[cell] = z;
+            rBuf[cell] = r;
+            gBuf[cell] = g;
+            bBuf[cell] = b;
+            lumBuf[cell] = 0.72;
+            rampBuf[cell] = 255;
+            charBuf[cell] = code;
+            partBuf[cell] = seg.partId;
+          }
+        }
+      }
+    }
+  }
+
+  function applyContourPass() {
+    for (let row = 1; row < rows - 1; row++) {
+      const rowOff = row * cols;
+      for (let col = 1; col < cols - 1; col++) {
+        const cell = rowOff + col;
+        const part = partBuf[cell];
+        if (part === 0 || rampBuf[cell] === 255) continue;
+
+        const z = zBuf[cell];
+        let frontEdge = false;
+        let behindEdge = false;
+
+        const nIdx = [cell - 1, cell + 1, cell - cols, cell + cols];
+        for (let k = 0; k < 4; k++) {
+          const nb = nIdx[k];
+          const nbPart = partBuf[nb];
+          if (nbPart === 0) {
+            frontEdge = true;
+          } else if (nbPart !== part) {
+            const nbZ = zBuf[nb];
+            if (nbZ > z + 0.045) {
+              behindEdge = true;
+              break;
+            } else if (z > nbZ + 0.045) {
+              frontEdge = true;
+            }
+          }
+        }
+
+        if (behindEdge) {
+          rBuf[cell] = (rBuf[cell] * 0.68) | 0;
+          gBuf[cell] = (gBuf[cell] * 0.68) | 0;
+          bBuf[cell] = (bBuf[cell] * 0.68) | 0;
+          lumBuf[cell] = Math.max(0.08, lumBuf[cell] * 0.68);
+        } else if (frontEdge) {
+          rBuf[cell] = Math.min(255, (rBuf[cell] * 1.22) | 0);
+          gBuf[cell] = Math.min(255, (gBuf[cell] * 1.22) | 0);
+          bBuf[cell] = Math.min(255, (bBuf[cell] * 1.22) | 0);
+          lumBuf[cell] = Math.min(1.0, lumBuf[cell] + 0.16);
+        }
+      }
+    }
+  }
+
+  function drawParticleGlyph(x, y, z, glyph, col, alphaScale, isFront, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist) {
+    const x1 = x * cosY + z * sinY;
+    const z1 = -x * sinY + z * cosY;
+    const y2 = y * cosP - z1 * sinP;
+    const z2 = y * sinP + z1 * cosP;
+
+    const dz = camDist - z2;
+    if (dz < 0.8) return;
+    const scale = projScale / dz;
+    const colIdx = ((centerX + x1 * scale) / cellW) | 0;
+    const rowIdx = ((centerY - (y2 + 0.04) * scale) / cellH) | 0;
+    if (colIdx < 0 || colIdx >= cols || rowIdx < 0 || rowIdx >= rows) return;
+
+    const cell = rowIdx * cols + colIdx;
+    if (isFront) {
+      if (partBuf[cell] > 0 && z2 <= zBuf[cell]) return;
+    } else {
+      if (partBuf[cell] > 0) return;
+    }
+
+    ctx.fillStyle = getCachedColor(col[0] * alphaScale, col[1] * alphaScale, col[2] * alphaScale);
+    ctx.fillText(glyph, colIdx * cellW, rowIdx * cellH);
+  }
+
+  function drawCrossSparkle(sp, t, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist) {
+    const x1 = sp.x * cosY + sp.z * sinY;
+    const z1 = -sp.x * sinY + sp.z * cosY;
+    const y2 = sp.y * cosP - z1 * sinP;
+    const z2 = sp.y * sinP + z1 * cosP;
+
+    const dz = camDist - z2;
+    if (dz < 0.8) return;
+    const scale = projScale / dz;
+    const cx = ((centerX + x1 * scale) / cellW) | 0;
+    const cy = ((centerY - (y2 + 0.04) * scale) / cellH) | 0;
+    if (cx < 2 || cx >= cols - 2 || cy < 2 || cy >= rows - 2) return;
+
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.4 + sp.phase);
+    const centerCell = cy * cols + cx;
+    if (partBuf[centerCell] > 0 && z2 < zBuf[centerCell]) return;
+
+    const armBright = 0.48 + 0.52 * pulse;
+    ctx.fillStyle = getCachedColor(
+      sp.col[0] * (0.68 + 0.32 * pulse),
+      sp.col[1] * (0.68 + 0.32 * pulse),
+      sp.col[2] * (0.68 + 0.32 * pulse)
+    );
+    ctx.fillText('+', cx * cellW, cy * cellH);
+
+    ctx.fillStyle = getCachedColor(sp.col[0] * armBright, sp.col[1] * armBright, sp.col[2] * armBright);
+    const armOffsets = [[-1, 0, '-'], [1, 0, '-'], [0, -1, '|'], [0, 1, '|']];
+    for (let k = 0; k < 4; k++) {
+      const ax = cx + armOffsets[k][0], ay = cy + armOffsets[k][1];
+      const cIdx = ay * cols + ax;
+      if (partBuf[cIdx] === 0 || z2 > zBuf[cIdx]) {
+        ctx.fillText(armOffsets[k][2], ax * cellW, ay * cellH);
+      }
+    }
+
+    if (pulse > 0.58) {
+      const tipBright = (pulse - 0.58) * 1.9;
+      ctx.fillStyle = getCachedColor(sp.col[0] * tipBright, sp.col[1] * tipBright, sp.col[2] * tipBright);
+      const tips = [[-2, 0, '.'], [2, 0, '.'], [0, -2, ':'], [0, 2, ':']];
+      for (let k = 0; k < 4; k++) {
+        const tx = cx + tips[k][0], ty = cy + tips[k][1];
+        const cIdx = ty * cols + tx;
+        if (partBuf[cIdx] === 0 || z2 > zBuf[cIdx]) {
+          ctx.fillText(tips[k][2], tx * cellW, ty * cellH);
+        }
+      }
+    }
+  }
+
+  function cellChar(cell) {
+    if (partBuf[cell] === 0) return ' ';
+    const rampId = rampBuf[cell];
+    if (rampId === 255) return String.fromCharCode(charBuf[cell]);
+    const ramp = RAMPS[rampId];
+    const lum = clamp(lumBuf[cell], 0.06, 1.0);
+    return ramp[Math.min(ramp.length - 1, (lum * ramp.length) | 0)];
+  }
+
+  function exportAsciiText() {
+    let minR = rows, maxR = -1, minC = cols, maxC = -1;
+    for (let r = 0; r < rows; r++) {
+      const off = r * cols;
+      for (let c = 0; c < cols; c++) {
+        if (partBuf[off + c] > 0 && cellChar(off + c) !== ' ') {
+          if (r < minR) minR = r;
+          if (r > maxR) maxR = r;
+          if (c < minC) minC = c;
+          if (c > maxC) maxC = c;
+        }
+      }
+    }
+    if (maxR < minR) return '';
+    const lines = [];
+    for (let r = minR; r <= maxR; r++) {
+      let line = '';
+      const off = r * cols;
+      for (let c = minC; c <= maxC; c++) {
+        line += cellChar(off + c);
+      }
+      lines.push(line.replace(/\s+$/, ''));
+    }
+    if (cfg.caption.trim()) {
+      lines.push('');
+      lines.push('  ' + cfg.caption.trim());
+    }
+    return lines.join('\n');
+  }
+
+  function downloadPng() {
+    try {
+      const a = document.createElement('a');
+      a.download = 'ascii-bouquet-' + cfg.seed + '.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    } catch (e) {
+
+    }
+  }
+
+  let lastTime = performance.now();
+
+  function renderFrame(now) {
+    const dt = Math.min(0.05, (now - lastTime) * 0.001);
+    lastTime = now;
+    const t = now * 0.001;
+
+    if (!state.dragging) {
+      if (state.playing) {
+        state.angleY += 0.40 * state.speedMul * dt;
+      }
+      state.angleY += state.velY;
+      state.pitch = clamp(state.pitch + state.velP, -0.78, 0.92);
+      state.velY *= 0.90;
+      state.velP *= 0.90;
+    }
+
+    const drawerOffset = (!state.drawerCollapsed && !state.hudHidden && viewW >= 1020) ? 310 : 0;
+    const targetCenterX = (viewW + drawerOffset) * 0.5;
+    state.currentCenterX += (targetCenterX - state.currentCenterX) * Math.min(1, dt * 10);
+
+    const centerX = state.currentCenterX;
+    const centerY = viewH * 0.48;
+
+    const grad = ctx.createRadialGradient(
+      centerX, centerY, viewH * 0.04,
+      centerX, centerY, Math.max(viewW, viewH) * 0.62
+    );
+    grad.addColorStop(0, '#141a2c');
+    grad.addColorStop(0.54, '#0a0d17');
+    grad.addColorStop(1, '#05060b');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, viewW, viewH);
+
+    zBuf.fill(-1e9);
+    partBuf.fill(0);
+
+    const cosY = Math.cos(state.angleY);
+    const sinY = Math.sin(state.angleY);
+    const cosP = Math.cos(state.pitch);
+    const sinP = Math.sin(state.pitch);
+
+    const camDist = 5.4;
+    const availW = Math.max(320, viewW - drawerOffset);
+    const baseScale = Math.min(viewH * 0.80, availW * 0.84) / 3.65;
+    const projScale = baseScale * camDist * state.zoom;
+
+    rasterizeTriangles(activeBouquet.mesh, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist, t);
+    drawStemLines(activeBouquet.stems, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist, t);
+
+    if (state.edges) {
+      applyContourPass();
+    }
+
+    const pList = activeBouquet.ambient.particles;
+    for (let i = 0; i < pList.length; i++) {
+      const p = pList[i];
+      const driftA = t * p.orbit;
+      const ca = Math.cos(driftA), sa = Math.sin(driftA);
+      const wx = p.x * ca - p.z * sa;
+      const wz = p.x * sa + p.z * ca;
+      const wy = p.y + Math.sin(t * p.speed + p.phase) * 0.08;
+      const twinkle = 0.35 + 0.45 * Math.sin(t * (1.5 + p.speed) + p.phase);
+      drawParticleGlyph(wx, wy, wz, p.glyph, p.col, twinkle, false, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist);
+    }
+
+    let prevColor = '';
+    const total = cols * rows;
+    for (let cell = 0; cell < total; cell++) {
+      if (partBuf[cell] === 0) continue;
+      const ch = cellChar(cell);
+      if (ch === ' ') continue;
+
+      const row = (cell / cols) | 0;
+      const col = cell - row * cols;
+      const colorStr = getCachedColor(rBuf[cell], gBuf[cell], bBuf[cell]);
+      if (colorStr !== prevColor) {
+        ctx.fillStyle = colorStr;
+        prevColor = colorStr;
+      }
+      ctx.fillText(ch, col * cellW, row * cellH);
+    }
+
+    for (let i = 0; i < pList.length; i++) {
+      const p = pList[i];
+      const driftA = t * p.orbit;
+      const ca = Math.cos(driftA), sa = Math.sin(driftA);
+      const wx = p.x * ca - p.z * sa;
+      const wz = p.x * sa + p.z * ca;
+      const wy = p.y + Math.sin(t * p.speed + p.phase) * 0.08;
+      const twinkle = 0.50 + 0.50 * Math.sin(t * (1.5 + p.speed) + p.phase);
+      drawParticleGlyph(wx, wy, wz, p.glyph, p.col, twinkle, true, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist);
+    }
+
+    const spList = activeBouquet.ambient.sparkles;
+    for (let i = 0; i < spList.length; i++) {
+      drawCrossSparkle(spList[i], t, cosY, sinY, cosP, sinP, centerX, centerY, projScale, camDist);
+    }
+
+    const cap = cfg.caption.trim();
+    if (cap) {
+      const capY = Math.min(viewH - 68, centerY + baseScale * 1.88 * Math.min(1.15, state.zoom));
+      const pal = PALETTES[cfg.palette] || PALETTES.autumn;
+      const cc = lerp3(pal.primary.mid, [255, 240, 244], 0.55);
+      ctx.save();
+      ctx.font = '13px "JetBrains Mono", "Cascadia Mono", Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = getCachedColor(cc[0], cc[1], cc[2]);
+      ctx.fillText(cap, centerX, capY);
+      ctx.restore();
+      ctx.font = cellH + 'px "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, "Courier New", monospace';
+      ctx.textBaseline = 'top';
+    }
+
+    if (state.glow) {
+      bloomCtx.clearRect(0, 0, bloomCanvas.width, bloomCanvas.height);
+      bloomCtx.filter = 'blur(2.4px)';
+      bloomCtx.drawImage(canvas, 0, 0, bloomCanvas.width, bloomCanvas.height);
+      bloomCtx.filter = 'none';
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.28;
+      ctx.drawImage(bloomCanvas, 0, 0, viewW, viewH);
+      ctx.restore();
+    }
+
+    requestAnimationFrame(renderFrame);
+  }
+
+  const studioEl = document.getElementById('studio');
+  const studioToggleEl = document.getElementById('studio-toggle');
+  const hudEl = document.getElementById('hud');
+  const seedBadgeEl = document.getElementById('seed-badge');
+  const statsEl = document.getElementById('studio-stats');
+
+  const presetGridEl = document.getElementById('preset-grid');
+  const speciesGridEl = document.getElementById('species-grid');
+  const speciesCountEl = document.getElementById('species-count');
+  const paletteRowEl = document.getElementById('palette-row');
+  const shapeRowEl = document.getElementById('shape-row');
+  const ribbonRowEl = document.getElementById('ribbon-row');
+  const wrapRowEl = document.getElementById('wrap-row');
+
+  const rngCountEl = document.getElementById('rng-count');
+  const valCountEl = document.getElementById('val-count');
+  const rngGreenEl = document.getElementById('rng-green');
+  const valGreenEl = document.getElementById('val-green');
+  const rngSpeedEl = document.getElementById('rng-speed');
+  const valSpeedEl = document.getElementById('val-speed');
+  const inpCaptionEl = document.getElementById('inp-caption');
+
+  const btnPlay = document.getElementById('btn-play');
+  const btnGlow = document.getElementById('btn-glow');
+  const btnDensity = document.getElementById('btn-density');
+  const btnEdges = document.getElementById('btn-edges');
+
+  function updateStatsReadout() {
+    if (!activeBouquet || !statsEl) return;
+    statsEl.textContent = activeBouquet.bloomCount + ' blooms · ' +
+      activeBouquet.mesh.tCount + ' tris · ' + cols + '×' + rows;
+  }
+
+  function encodeHash() {
+    try {
+      const payload = {
+        s: cfg.seed,
+        p: cfg.preset,
+        pal: cfg.palette,
+        sp: cfg.species,
+        sh: cfg.shape,
+        n: cfg.bloomCount,
+        g: cfg.greenery,
+        r: cfg.ribbon,
+        w: cfg.wrap,
+        c: cfg.caption
+      };
+      const json = JSON.stringify(payload);
+      return '#b=' + btoa(unescape(encodeURIComponent(json)));
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function saveHashQuiet() {
+    const hash = encodeHash();
+    if (!hash) return;
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', hash);
+      }
+    } catch (e) {
+
+    }
+  }
+
+  function loadHashIfPresent() {
+    try {
+      const h = window.location.hash || '';
+      if (!h.startsWith('#b=')) return false;
+      const json = decodeURIComponent(escape(atob(h.slice(3))));
+      const d = JSON.parse(json);
+      if (typeof d.s === 'number') cfg.seed = d.s >>> 0;
+      if (typeof d.p === 'string') cfg.preset = d.p;
+      if (typeof d.pal === 'string' && PALETTES[d.pal]) cfg.palette = d.pal;
+      if (Array.isArray(d.sp) && d.sp.length > 0) cfg.species = d.sp.filter(id => SPECIES_LIST.some(x => x.id === id));
+      if (cfg.species.length === 0) cfg.species = ['rose'];
+      if (typeof d.sh === 'string' && SHAPES.some(x => x.id === d.sh)) cfg.shape = d.sh;
+      if (typeof d.n === 'number') cfg.bloomCount = clamp(Math.round(d.n), 6, 24);
+      if (typeof d.g === 'number') cfg.greenery = clamp(Math.round(d.g), 0, 100);
+      if (typeof d.r === 'string') cfg.ribbon = d.r;
+      if (d.w === 'none' || d.w === 'veil') cfg.wrap = d.w;
+      if (typeof d.c === 'string') cfg.caption = d.c.slice(0, 44);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function buildStudioControls() {
+
+    presetGridEl.innerHTML = '';
+    for (const pr of PRESETS) {
+      const btn = document.createElement('button');
+      btn.className = 'chip-btn';
+      btn.dataset.preset = pr.id;
+      btn.innerHTML = '<span class="swatch-dot" style="background:' + pr.dot + '"></span><span>' + pr.name + '</span>';
+      btn.addEventListener('click', () => applyPreset(pr));
+      presetGridEl.appendChild(btn);
+    }
+
+    speciesGridEl.innerHTML = '';
+    for (const sp of SPECIES_LIST) {
+      const btn = document.createElement('button');
+      btn.className = 'chip-btn';
+      btn.dataset.species = sp.id;
+      btn.textContent = sp.name;
+      btn.addEventListener('click', () => toggleSpecies(sp.id));
+      speciesGridEl.appendChild(btn);
+    }
+
+    paletteRowEl.innerHTML = '';
+    for (const key of Object.keys(PALETTES)) {
+      const pal = PALETTES[key];
+      const btn = document.createElement('button');
+      btn.className = 'pal-btn';
+      btn.dataset.palette = pal.id;
+      btn.innerHTML = '<span class="swatch-dot" style="background:' + pal.swatch + '"></span><span>' + pal.name + '</span>';
+      btn.addEventListener('click', () => {
+        cfg.palette = pal.id;
+        cfg.preset = '';
+        regenerateBouquet();
+        syncUI();
+      });
+      paletteRowEl.appendChild(btn);
+    }
+
+    shapeRowEl.innerHTML = '';
+    for (const sh of SHAPES) {
+      const btn = document.createElement('button');
+      btn.className = 'seg-btn';
+      btn.dataset.shape = sh.id;
+      btn.textContent = sh.name;
+      btn.addEventListener('click', () => {
+        cfg.shape = sh.id;
+        cfg.preset = '';
+        regenerateBouquet();
+        syncUI();
+      });
+      shapeRowEl.appendChild(btn);
+    }
+
+    ribbonRowEl.innerHTML = '';
+    const autoBtn = document.createElement('button');
+    autoBtn.className = 'seg-btn';
+    autoBtn.style.flex = '0 0 auto';
+    autoBtn.style.padding = '4px 8px';
+    autoBtn.dataset.ribbon = 'auto';
+    autoBtn.textContent = 'Auto';
+    autoBtn.addEventListener('click', () => { cfg.ribbon = 'auto'; regenerateBouquet(); syncUI(); });
+    ribbonRowEl.appendChild(autoBtn);
+
+    for (const rk of Object.keys(RIBBON_THEMES)) {
+      const dot = document.createElement('button');
+      dot.className = 'rib-dot';
+      dot.dataset.ribbon = rk;
+      dot.style.background = RIBBON_THEMES[rk].css;
+      dot.title = rk;
+      dot.addEventListener('click', () => { cfg.ribbon = rk; regenerateBouquet(); syncUI(); });
+      ribbonRowEl.appendChild(dot);
+    }
+
+    const noneBtn = document.createElement('button');
+    noneBtn.className = 'seg-btn';
+    noneBtn.style.flex = '0 0 auto';
+    noneBtn.style.padding = '4px 8px';
+    noneBtn.dataset.ribbon = 'none';
+    noneBtn.textContent = 'None';
+    noneBtn.addEventListener('click', () => { cfg.ribbon = 'none'; regenerateBouquet(); syncUI(); });
+    ribbonRowEl.appendChild(noneBtn);
+
+    wrapRowEl.innerHTML = '';
+    for (const w of [{ id: 'none', name: 'No Wrap' }, { id: 'veil', name: 'Contour Veil' }]) {
+      const btn = document.createElement('button');
+      btn.className = 'seg-btn';
+      btn.dataset.wrap = w.id;
+      btn.textContent = w.name;
+      btn.addEventListener('click', () => { cfg.wrap = w.id; regenerateBouquet(); syncUI(); });
+      wrapRowEl.appendChild(btn);
+    }
+  }
+
+  function applyPreset(pr) {
+    cfg.preset = pr.id;
+    cfg.species = pr.species.slice();
+    cfg.palette = pr.palette;
+    cfg.shape = pr.shape;
+    cfg.bloomCount = pr.bloomCount;
+    cfg.greenery = pr.greenery;
+    cfg.ribbon = pr.ribbon;
+    cfg.wrap = pr.wrap;
+    cfg.seed = Math.floor(Math.random() * 899999 + 100000);
+    regenerateBouquet();
+    syncUI();
+  }
+
+  function toggleSpecies(id) {
+    const idx = cfg.species.indexOf(id);
+    if (idx >= 0) {
+      if (cfg.species.length <= 1) return;
+      cfg.species.splice(idx, 1);
+    } else {
+      cfg.species.push(id);
+    }
+    cfg.preset = '';
+    regenerateBouquet();
+    syncUI();
+  }
+
+  function newSeedBouquet() {
+    cfg.seed = Math.floor(Math.random() * 899999 + 100000);
+    regenerateBouquet();
+    syncUI();
+  }
+
+  function fullRandomize() {
+    const palKeys = Object.keys(PALETTES);
+    cfg.palette = palKeys[Math.floor(Math.random() * palKeys.length)];
+    cfg.shape = SHAPES[Math.floor(Math.random() * SHAPES.length)].id;
+    cfg.bloomCount = 9 + Math.floor(Math.random() * 12);
+    cfg.greenery = 40 + Math.floor(Math.random() * 11) * 5;
+    cfg.ribbon = 'auto';
+    cfg.wrap = Math.random() < 0.25 ? 'veil' : 'none';
+    cfg.preset = '';
+
+    const countSp = 2 + Math.floor(Math.random() * 5);
+    const pool = SPECIES_LIST.map(s => s.id);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+    cfg.species = pool.slice(0, countSp);
+    cfg.seed = Math.floor(Math.random() * 899999 + 100000);
+    regenerateBouquet();
+    syncUI();
+  }
+
+  function syncUI() {
+    studioEl.classList.toggle('collapsed', state.drawerCollapsed || state.hudHidden);
+    studioToggleEl.classList.toggle('hidden', !state.drawerCollapsed || state.hudHidden);
+    hudEl.classList.toggle('hidden', state.hudHidden);
+
+    seedBadgeEl.textContent = '#' + cfg.seed;
+    speciesCountEl.textContent = cfg.species.length + ' of ' + SPECIES_LIST.length;
+
+    for (const el of presetGridEl.children) {
+      el.classList.toggle('active', el.dataset.preset === cfg.preset);
+    }
+    for (const el of speciesGridEl.children) {
+      el.classList.toggle('active', cfg.species.includes(el.dataset.species));
+    }
+    for (const el of paletteRowEl.children) {
+      el.classList.toggle('active', el.dataset.palette === cfg.palette);
+    }
+    for (const el of shapeRowEl.children) {
+      el.classList.toggle('active', el.dataset.shape === cfg.shape);
+    }
+    for (const el of ribbonRowEl.children) {
+      el.classList.toggle('active', el.dataset.ribbon === cfg.ribbon);
+    }
+    for (const el of wrapRowEl.children) {
+      el.classList.toggle('active', el.dataset.wrap === cfg.wrap);
+    }
+
+    rngCountEl.value = String(cfg.bloomCount);
+    valCountEl.textContent = String(cfg.bloomCount);
+    rngGreenEl.value = String(cfg.greenery);
+    valGreenEl.textContent = cfg.greenery + '%';
+    rngSpeedEl.value = String(state.speedMul);
+    valSpeedEl.textContent = state.speedMul.toFixed(1) + 'x';
+    if (document.activeElement !== inpCaptionEl) {
+      inpCaptionEl.value = cfg.caption;
+    }
+
+    btnPlay.textContent = state.playing ? 'Pause' : 'Play';
+    btnPlay.classList.toggle('active', state.playing);
+    btnGlow.textContent = state.glow ? 'Glow: On' : 'Glow: Off';
+    btnGlow.classList.toggle('active', state.glow);
+    btnDensity.textContent = state.densityLabels[state.densityIdx];
+    btnDensity.classList.toggle('active', state.densityIdx !== 2);
+    btnEdges.textContent = state.edges ? 'Edges: On' : 'Edges: Off';
+    btnEdges.classList.toggle('active', state.edges);
+  }
+
+  function copyWithFeedback(btnEl, text) {
+    const orig = btnEl.textContent;
+    const done = () => {
+      btnEl.textContent = '✓ Copied';
+      setTimeout(() => { btnEl.textContent = orig; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function fallbackCopy(text, cb) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) {}
+    cb();
+  }
+
+  document.getElementById('btn-collapse').addEventListener('click', () => {
+    state.drawerCollapsed = true;
+    syncUI();
+  });
+  studioToggleEl.addEventListener('click', () => {
+    state.drawerCollapsed = false;
+    syncUI();
+  });
+
+  document.getElementById('btn-new-seed').addEventListener('click', newSeedBouquet);
+  document.getElementById('btn-hud-new').addEventListener('click', newSeedBouquet);
+  document.getElementById('btn-full-rand').addEventListener('click', fullRandomize);
+
+  rngCountEl.addEventListener('input', () => {
+    cfg.bloomCount = parseInt(rngCountEl.value, 10);
+    valCountEl.textContent = String(cfg.bloomCount);
+    cfg.preset = '';
+    regenerateBouquet();
+    syncUI();
+  });
+
+  rngGreenEl.addEventListener('input', () => {
+    cfg.greenery = parseInt(rngGreenEl.value, 10);
+    valGreenEl.textContent = cfg.greenery + '%';
+    cfg.preset = '';
+    regenerateBouquet();
+    syncUI();
+  });
+
+  rngSpeedEl.addEventListener('input', () => {
+    state.speedMul = parseFloat(rngSpeedEl.value);
+    valSpeedEl.textContent = state.speedMul.toFixed(1) + 'x';
+  });
+
+  inpCaptionEl.addEventListener('input', () => {
+    cfg.caption = inpCaptionEl.value.slice(0, 44);
+    saveHashQuiet();
+  });
+
+  document.getElementById('btn-png').addEventListener('click', downloadPng);
+
+  const btnAscii = document.getElementById('btn-ascii');
+  btnAscii.addEventListener('click', () => {
+    const txt = exportAsciiText();
+    if (txt) copyWithFeedback(btnAscii, txt);
+  });
+
+  const btnShare = document.getElementById('btn-share');
+  btnShare.addEventListener('click', () => {
+    saveHashQuiet();
+    const hash = encodeHash();
+    const shareStr = window.location.href.split('#')[0] + hash;
+    copyWithFeedback(btnShare, shareStr);
+  });
+
+  btnPlay.addEventListener('click', () => { state.playing = !state.playing; syncUI(); });
+  btnGlow.addEventListener('click', () => { state.glow = !state.glow; syncUI(); });
+  btnEdges.addEventListener('click', () => { state.edges = !state.edges; syncUI(); });
+  btnDensity.addEventListener('click', () => {
+    state.densityIdx = (state.densityIdx + 1) % state.densityLabels.length;
+    resize();
+    syncUI();
+  });
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    state.angleY = 0.0;
+    state.pitch = 0.24;
+    state.zoom = 1.0;
+    state.velY = 0.0;
+    state.velP = 0.0;
+    state.playing = true;
+    syncUI();
+  });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    state.dragging = true;
+    state.lastX = e.clientX;
+    state.lastY = e.clientY;
+    state.velY = 0;
+    state.velP = 0;
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!state.dragging) return;
+    const dx = e.clientX - state.lastX;
+    const dy = e.clientY - state.lastY;
+    state.lastX = e.clientX;
+    state.lastY = e.clientY;
+
+    const dAngle = dx * 0.0085;
+    const dPitch = dy * 0.0065;
+    state.angleY += dAngle;
+    state.pitch = clamp(state.pitch + dPitch, -0.78, 0.92);
+    state.velY = dAngle * 0.65;
+    state.velP = dPitch * 0.65;
+  });
+
+  function stopDrag() { state.dragging = false; }
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.92 : 1.08;
+    state.zoom = clamp(state.zoom * factor, 0.58, 2.20);
+  }, { passive: false });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      state.playing = !state.playing;
+      syncUI();
+    } else if (e.code === 'Tab') {
+      e.preventDefault();
+      state.drawerCollapsed = !state.drawerCollapsed;
+      syncUI();
+    } else if (e.code === 'KeyN') {
+      newSeedBouquet();
+    } else if (e.code === 'KeyR') {
+      state.angleY = 0.0;
+      state.pitch = 0.24;
+      state.zoom = 1.0;
+      state.velY = 0.0;
+      state.velP = 0.0;
+      state.playing = true;
+      syncUI();
+    } else if (e.code === 'KeyG') {
+      state.glow = !state.glow;
+      syncUI();
+    } else if (e.code === 'KeyD') {
+      state.densityIdx = (state.densityIdx + 1) % state.densityLabels.length;
+      resize();
+      syncUI();
+    } else if (e.code === 'KeyE') {
+      state.edges = !state.edges;
+      syncUI();
+    } else if (e.code === 'KeyH') {
+      state.hudHidden = !state.hudHidden;
+      syncUI();
+    }
+  });
+
+  window.addEventListener('resize', resize);
+
+  loadHashIfPresent();
+  buildStudioControls();
+  resize();
+  regenerateBouquet();
+  syncUI();
+  requestAnimationFrame(renderFrame);
+})();
+</script>
+</body>
+</html>
